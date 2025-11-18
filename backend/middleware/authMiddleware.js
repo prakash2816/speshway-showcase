@@ -1,6 +1,13 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
+const dynamoClient = new DynamoDBClient({});
+const docClient = DynamoDBDocumentClient.from(dynamoClient);
+
+const USERS_TABLE = process.env.USERS_TABLE; // "Users"
+
+// Middleware: Protect Routes
 const protect = async (req, res, next) => {
   let token;
 
@@ -9,18 +16,26 @@ const protect = async (req, res, next) => {
     req.headers.authorization.startsWith('Bearer')
   ) {
     try {
-      // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify token
+      // Decode token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from the token
-      req.user = await User.findById(decoded.id).select('-password');
+      // Fetch user from DynamoDB
+      const params = {
+        TableName: USERS_TABLE,
+        Key: { id: decoded.id }
+      };
 
-      if (!req.user) {
+      const { Item } = await docClient.send(new GetCommand(params));
+
+      if (!Item) {
         return res.status(401).json({ message: 'User not found' });
       }
+
+      // Remove password before attaching
+      const { password, ...userData } = Item;
+      req.user = userData;
 
       next();
     } catch (error) {
@@ -32,6 +47,7 @@ const protect = async (req, res, next) => {
   }
 };
 
+// Middleware: Optional Token (User may or may not be logged in)
 const optionalProtect = async (req, res, next) => {
   let token;
 
@@ -40,23 +56,32 @@ const optionalProtect = async (req, res, next) => {
     req.headers.authorization.startsWith('Bearer')
   ) {
     try {
-      // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Get user from the token
-      req.user = await User.findById(decoded.id).select('-password');
+      const params = {
+        TableName: USERS_TABLE,
+        Key: { id: decoded.id }
+      };
+
+      const { Item } = await docClient.send(new GetCommand(params));
+
+      if (Item) {
+        const { password, ...userData } = Item;
+        req.user = userData;
+      } else {
+        req.user = undefined;
+      }
     } catch (error) {
-      // If token is invalid, just continue without setting req.user
       req.user = undefined;
     }
   }
-  
+
   next();
 };
 
+// Middleware: Admin Only
 const admin = (req, res, next) => {
   if (req.user && (req.user.role === 'admin' || req.user.role === 'hr')) {
     next();
