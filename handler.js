@@ -1,85 +1,82 @@
-const AWS = require("aws-sdk");
+// handler.js
+import { DynamoDBClient, GetItemCommand, PutItemCommand, ScanCommand, DeleteItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 
-// DynamoDB client
-const dynamoDb = new AWS.DynamoDB.DocumentClient({
-    region: process.env.AWS_REGION || "ap-south-1",
+// Initialize DynamoDB client
+const client = new DynamoDBClient({ region: "ap-south-1" });
+
+// Map table names here
+const TABLES = {
+  users: "UsersTable",
+  orders: "OrdersTable",
+  products: "ProductsTable",
+  categories: "CategoriesTable",
+  payments: "PaymentsTable",
+  reviews: "ReviewsTable",
+  carts: "CartsTable",
+  logs: "LogsTable"
+};
+
+// Helper to handle responses
+const response = (statusCode, body) => ({
+  statusCode,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body)
 });
 
 // Lambda handler
-exports.handler = async (event) => {
-    console.log("Received event:", JSON.stringify(event, null, 2));
+export const handler = async (event) => {
+  try {
+    const { table, action, payload, key } = JSON.parse(event.body);
 
-    try {
-        // Determine table
-        // Option 1: table name passed as query param or in body
-        let tableName = event.queryStringParameters?.tableName;
-        if (!tableName && event.body) {
-            const body = JSON.parse(event.body);
-            tableName = body.tableName;
-        }
+    if (!TABLES[table]) return response(400, { error: "Invalid table name" });
 
-        if (!tableName) {
-            return {
-                statusCode: 400,
-                body: JSON.stringify({ message: "Missing tableName" }),
-            };
-        }
+    switch (action) {
+      case "get":
+        if (!key) return response(400, { error: "Missing key for get" });
+        const getCommand = new GetItemCommand({
+          TableName: TABLES[table],
+          Key: key
+        });
+        const getResult = await client.send(getCommand);
+        return response(200, getResult.Item || {});
 
-        // Example: GET item
-        if (event.httpMethod === "GET") {
-            const id = event.queryStringParameters?.id;
-            if (!id) {
-                return {
-                    statusCode: 400,
-                    body: JSON.stringify({ message: "Missing id parameter" }),
-                };
-            }
+      case "scan":
+        const scanCommand = new ScanCommand({ TableName: TABLES[table] });
+        const scanResult = await client.send(scanCommand);
+        return response(200, scanResult.Items || []);
 
-            const params = {
-                TableName: tableName,
-                Key: { id },
-            };
+      case "put":
+        if (!payload) return response(400, { error: "Missing payload for put" });
+        const putCommand = new PutItemCommand({
+          TableName: TABLES[table],
+          Item: payload
+        });
+        await client.send(putCommand);
+        return response(200, { message: "Item inserted successfully" });
 
-            const result = await dynamoDb.get(params).promise();
+      case "update":
+        if (!key || !payload) return response(400, { error: "Missing key or payload for update" });
+        const updateCommand = new UpdateItemCommand({
+          TableName: TABLES[table],
+          Key: key,
+          AttributeUpdates: payload
+        });
+        await client.send(updateCommand);
+        return response(200, { message: "Item updated successfully" });
 
-            return {
-                statusCode: 200,
-                body: JSON.stringify(result.Item || {}),
-            };
-        }
+      case "delete":
+        if (!key) return response(400, { error: "Missing key for delete" });
+        const deleteCommand = new DeleteItemCommand({
+          TableName: TABLES[table],
+          Key: key
+        });
+        await client.send(deleteCommand);
+        return response(200, { message: "Item deleted successfully" });
 
-        // Example: POST item
-        if (event.httpMethod === "POST") {
-            const body = JSON.parse(event.body);
-            if (!body.id) {
-                return {
-                    statusCode: 400,
-                    body: JSON.stringify({ message: "Missing id in body" }),
-                };
-            }
-
-            const params = {
-                TableName: tableName,
-                Item: body,
-            };
-
-            await dynamoDb.put(params).promise();
-
-            return {
-                statusCode: 201,
-                body: JSON.stringify({ message: "Item created", item: body }),
-            };
-        }
-
-        return {
-            statusCode: 405,
-            body: JSON.stringify({ message: "Method Not Allowed" }),
-        };
-    } catch (error) {
-        console.error("Error:", error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: "Internal Server Error", error }),
-        };
+      default:
+        return response(400, { error: "Invalid action" });
     }
+  } catch (err) {
+    return response(500, { error: err.message });
+  }
 };
