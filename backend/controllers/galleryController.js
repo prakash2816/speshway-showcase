@@ -1,448 +1,390 @@
-const Gallery = require('../models/Gallery');
-const { cloudinary } = require('../config/cloudinary');
-const mongoose = require('mongoose');
+// galleryController.js (DynamoDB + S3 + Multer)
+require("dotenv").config();
+const {
+  DynamoDBClient
+} = require("@aws-sdk/client-dynamodb");
 
-// @desc    Get all gallery items with filtering
-// @route   GET /api/gallery
-// @access  Public
+const {
+  DynamoDBDocumentClient,
+  PutCommand,
+  GetCommand,
+  ScanCommand,
+  UpdateCommand,
+  DeleteCommand
+} = require("@aws-sdk/lib-dynamodb");
+
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const multer = require("multer");
+const path = require("path");
+const { v4: uuid } = require("uuid");
+
+// AWS Clients
+const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const ddb = DynamoDBDocumentClient.from(ddbClient);
+
+const s3 = new S3Client({ region: process.env.AWS_REGION });
+const BUCKET = process.env.AWS_S3_BUCKET;
+
+// DynamoDB table
+const TABLE = "GalleryTable";
+
+// Multer for S3 uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    const allowed = /jpeg|jpg|png|webp/.test(path.extname(file.originalname).toLowerCase());
+    if (!allowed) return cb(new Error("Only image files allowed"));
+    cb(null, true);
+  }
+});
+
+// -----------------------------------------
+//  GET ALL GALLERY ITEMS
+// -----------------------------------------
 const getGalleryItems = async (req, res) => {
   try {
-    const { category, limit = 12, page = 1, sort = '-date' } = req.query;
-    
-    // Build query
-    const query = { 
-      isActive: true,
-      title: { $ne: 'Category Placeholder' } // Exclude placeholder items from public view
-    };
-    if (category && category !== 'all') {
-      query.category = category;
+    const { category, limit = 12, page = 1, sort = "DESC" } = req.query;
+
+    const params = { TableName: TABLE };
+    const result = await ddb.send(new ScanCommand(params));
+
+    let items = result.Items || [];
+
+    // filter active only
+    items = items.filter(i => i.isActive && i.title !== "Category Placeholder");
+
+    if (category && category !== "all") {
+      items = items.filter(i => i.category === category);
     }
 
-    // Calculate pagination
-    const skip = (page - 1) * limit;
+    // sorting
+    items.sort((a, b) => sort === "ASC" ? a.date - b.date : b.date - a.date);
 
-    // Execute query with pagination
-    const galleryItems = await Gallery.find(query)
-      .populate('createdBy', 'name email')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
+    // pagination
+    const start = (page - 1) * limit;
+    const paginated = items.slice(start, start + parseInt(limit));
 
-    // Get total count for pagination
-    const totalCount = await Gallery.countDocuments(query);
-    const totalPages = Math.ceil(totalCount / limit);
-
-    res.status(200).json({
+    res.json({
       success: true,
-      data: galleryItems,
+      data: paginated,
       pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalItems: totalCount,
-        itemsPerPage: parseInt(limit),
-        hasNext: page < totalPages,
+        currentPage: Number(page),
+        totalPages: Math.ceil(items.length / limit),
+        totalItems: items.length,
+        itemsPerPage: Number(limit),
+        hasNext: start + Number(limit) < items.length,
         hasPrev: page > 1
       }
     });
   } catch (error) {
-    console.error('Error fetching gallery items:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch gallery items',
-      error: error.message
-    });
+    console.error("Gallery list error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get single gallery item
-// @route   GET /api/gallery/:id
-// @access  Public
+// -----------------------------------------
+//  GET SINGLE ITEM
+// -----------------------------------------
 const getGalleryItem = async (req, res) => {
   try {
-    const galleryItem = await Gallery.findById(req.params.id)
-      .populate('createdBy', 'name email');
+    const { Item } = await ddb.send(
+      new GetCommand({
+        TableName: TABLE,
+        Key: { id: req.params.id }
+      })
+    );
 
-    if (!galleryItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'Gallery item not found'
-      });
-    }
+    if (!Item) return res.status(404).json({ success: false, message: "Not found" });
 
-    res.status(200).json({
-      success: true,
-      data: galleryItem
-    });
+    res.json({ success: true, data: Item });
   } catch (error) {
-    console.error('Error fetching gallery item:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch gallery item',
-      error: error.message
-    });
+    console.error("Get single error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Create new gallery item
-// @route   POST /api/gallery
-// @access  Private (Admin)
+// -----------------------------------------
+//  CREATE NEW GALLERY
+// -----------------------------------------
 const createGalleryItem = async (req, res) => {
   try {
     const { title, description, category, date, location, readMoreLink } = req.body;
 
-    // Validate required fields
     if (!title || !description || !category) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide title, description, and category'
-      });
+      return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
-    // Category validation removed - allow any category
+    if (!req.file) return res.status(400).json({ success: false, message: "Image required" });
 
-    // Check if image was uploaded
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please upload an image'
-      });
-    }
+    // upload file to S3
+    const key = `gallery/${Date.now()}-${req.file.originalname}`;
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype
+      })
+    );
 
-    // Create gallery item
-    const galleryItem = await Gallery.create({
+    const id = uuid();
+    const item = {
+      id,
       title,
       description,
       category,
-      date: date || new Date(),
-      location: location || '',
-      readMoreLink: readMoreLink || '',
+      date: date ? Number(new Date(date)) : Date.now(),
+      location: location || "",
+      readMoreLink: readMoreLink || "",
       image: {
-        url: req.file.path,
-        publicId: req.file.filename
+        url: `https://${BUCKET}.s3.amazonaws.com/${key}`,
+        key
       },
-      createdBy: req.user.id
-    });
+      createdBy: req.user?.id || "admin",
+      isActive: true,
+      createdAt: Date.now()
+    };
 
-    // Populate createdBy field for response
-    await galleryItem.populate('createdBy', 'name email');
+    await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
 
-    res.status(201).json({
-      success: true,
-      message: 'Gallery item created successfully',
-      data: galleryItem
-    });
+    res.status(201).json({ success: true, data: item });
   } catch (error) {
-    console.error('Error creating gallery item:', error);
-    
-    // Clean up uploaded image if creation failed
-    if (req.file && req.file.filename) {
-      try {
-        await cloudinary.uploader.destroy(req.file.filename);
-      } catch (cloudinaryError) {
-        console.error('Error deleting image from Cloudinary:', cloudinaryError);
-      }
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create gallery item',
-      error: error.message
-    });
+    console.error("Create gallery error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Update gallery item
-// @route   PUT /api/gallery/:id
-// @access  Private (Admin)
+// -----------------------------------------
+//  UPDATE GALLERY
+// -----------------------------------------
 const updateGalleryItem = async (req, res) => {
   try {
     const { title, description, category, date, location, readMoreLink, isActive } = req.body;
 
-    // Find existing gallery item
-    let galleryItem = await Gallery.findById(req.params.id);
+    const { Item: oldItem } = await ddb.send(
+      new GetCommand({
+        TableName: TABLE,
+        Key: { id: req.params.id }
+      })
+    );
 
-    if (!galleryItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'Gallery item not found'
-      });
+    if (!oldItem) {
+      return res.status(404).json({ success: false, message: "Item not found" });
     }
 
-    // Category validation removed - allow any category
+    let newImage = oldItem.image;
 
-    // Store old image info in case we need to delete it
-    const oldImagePublicId = galleryItem.image.publicId;
-
-    // Update fields
-    if (title) galleryItem.title = title;
-    if (description) galleryItem.description = description;
-    if (category) galleryItem.category = category;
-    if (date) galleryItem.date = date;
-    if (location !== undefined) galleryItem.location = location;
-    if (readMoreLink !== undefined) galleryItem.readMoreLink = readMoreLink;
-    if (isActive !== undefined) galleryItem.isActive = isActive;
-
-    // Handle new image upload
+    // uploading new image
     if (req.file) {
-      galleryItem.image = {
-        url: req.file.path,
-        publicId: req.file.filename
-      };
-    }
+      const key = `gallery/${Date.now()}-${req.file.originalname}`;
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: BUCKET,
+          Key: key,
+          Body: req.file.buffer,
+          ContentType: req.file.mimetype
+        })
+      );
+      newImage = { url: `https://${BUCKET}.s3.amazonaws.com/${key}`, key };
 
-    await galleryItem.save();
-
-    // Populate createdBy field for response
-    await galleryItem.populate('createdBy', 'name email');
-
-    // Delete old image from Cloudinary if new image was uploaded
-    if (req.file && oldImagePublicId) {
-      try {
-        await cloudinary.uploader.destroy(oldImagePublicId);
-      } catch (cloudinaryError) {
-        console.error('Error deleting old image from Cloudinary:', cloudinaryError);
+      // Delete old file
+      if (oldItem.image?.key) {
+        await s3.send(
+          new DeleteObjectCommand({
+            Bucket: BUCKET,
+            Key: oldItem.image.key
+          })
+        );
       }
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Gallery item updated successfully',
-      data: galleryItem
-    });
+    const updates = {
+      ...oldItem,
+      title: title || oldItem.title,
+      description: description || oldItem.description,
+      category: category || oldItem.category,
+      location: location !== undefined ? location : oldItem.location,
+      readMoreLink: readMoreLink !== undefined ? readMoreLink : oldItem.readMoreLink,
+      date: date ? Number(new Date(date)) : oldItem.date,
+      isActive: isActive !== undefined ? isActive : oldItem.isActive,
+      image: newImage
+    };
+
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: updates
+      })
+    );
+
+    res.json({ success: true, data: updates });
   } catch (error) {
-    console.error('Error updating gallery item:', error);
-
-    // Clean up uploaded image if update failed
-    if (req.file && req.file.filename) {
-      try {
-        await cloudinary.uploader.destroy(req.file.filename);
-      } catch (cloudinaryError) {
-        console.error('Error deleting image from Cloudinary:', cloudinaryError);
-      }
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update gallery item',
-      error: error.message
-    });
+    console.error("Update gallery error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Delete gallery item
-// @route   DELETE /api/gallery/:id
-// @access  Private (Admin)
+// -----------------------------------------
+//  DELETE GALLERY
+// -----------------------------------------
 const deleteGalleryItem = async (req, res) => {
   try {
-    const galleryItem = await Gallery.findById(req.params.id);
+    const { Item } = await ddb.send(
+      new GetCommand({ TableName: TABLE, Key: { id: req.params.id } })
+    );
 
-    if (!galleryItem) {
-      return res.status(404).json({
-        success: false,
-        message: 'Gallery item not found'
-      });
+    if (!Item) return res.status(404).json({ success: false, message: "Not found" });
+
+    // delete image from s3
+    if (Item.image?.key) {
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: BUCKET,
+          Key: Item.image.key
+        })
+      );
     }
 
-    // Delete image from Cloudinary
-    if (galleryItem.image.publicId) {
-      try {
-        await cloudinary.uploader.destroy(galleryItem.image.publicId);
-      } catch (cloudinaryError) {
-        console.error('Error deleting image from Cloudinary:', cloudinaryError);
-      }
-    }
+    await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { id: req.params.id } }));
 
-    await galleryItem.deleteOne();
-
-    res.status(200).json({
-      success: true,
-      message: 'Gallery item deleted successfully'
-    });
+    res.json({ success: true, message: "Deleted successfully" });
   } catch (error) {
-    console.error('Error deleting gallery item:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete gallery item',
-      error: error.message
-    });
+    console.error("Delete error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get gallery statistics
-// @route   GET /api/gallery/stats
-// @access  Private (Admin)
+// -----------------------------------------
+//  GALLERY STATISTICS
+// -----------------------------------------
 const getGalleryStats = async (req, res) => {
   try {
-    const stats = await Gallery.aggregate([
-      {
-        $group: {
-          _id: '$category',
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $project: {
-          category: '$_id',
-          count: 1,
-          _id: 0
-        }
-      }
-    ]);
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
+    const items = result.Items || [];
 
-    const totalItems = await Gallery.countDocuments();
-    const activeItems = await Gallery.countDocuments({ isActive: true });
+    const totalItems = items.length;
+    const activeItems = items.filter(i => i.isActive).length;
 
-    res.status(200).json({
+    const categoryStats = {};
+    items.forEach(i => {
+      if (!categoryStats[i.category]) categoryStats[i.category] = 0;
+      categoryStats[i.category]++;
+    });
+
+    const formattedStats = Object.keys(categoryStats).map(cat => ({
+      category: cat,
+      count: categoryStats[cat]
+    }));
+
+    res.json({
       success: true,
       data: {
         totalItems,
         activeItems,
-        categoryStats: stats
+        categoryStats: formattedStats
       }
     });
   } catch (error) {
-    console.error('Error fetching gallery stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch gallery statistics',
-      error: error.message
-    });
+    console.error("Stats error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get all unique categories
-// @route   GET /api/gallery/categories
-// @access  Public
+// -----------------------------------------
+//  GET UNIQUE CATEGORIES
+// -----------------------------------------
 const getCategories = async (req, res) => {
   try {
-    // Get unique categories from the database (including inactive items)
-    const categories = await Gallery.distinct('category');
-    
-    // Also get categories from recently created items (even if placeholder was deleted)
-    // We'll maintain a separate collection or use a different approach
-    const defaultCategories = ['Fests', 'Awards', 'Fun Activities', 'Team Moments'];
-    
-    // Combine existing categories with defaults, removing duplicates
-    const allCategories = [...new Set([...categories, ...defaultCategories])];
-    
-    // Sort categories alphabetically
-    allCategories.sort();
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
+    const items = result.Items || [];
 
-    res.status(200).json({
-      success: true,
-      data: allCategories
-    });
+    const categories = [...new Set(items.map(i => i.category))];
+
+    const defaultCategories = ["Fests", "Awards", "Fun Activities", "Team Moments"];
+
+    const all = [...new Set([...categories, ...defaultCategories])].sort();
+
+    res.json({ success: true, data: all });
   } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch categories',
-      error: error.message
-    });
+    console.error("Category error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Create new category
-// @route   POST /api/gallery/categories
-// @access  Private (Admin)
+// -----------------------------------------
+//  CREATE CATEGORY (PLACEHOLDER ITEM)
+// -----------------------------------------
 const createCategory = async (req, res) => {
   try {
     const { name } = req.body;
 
     if (!name || !name.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Category name is required'
-      });
+      return res.status(400).json({ success: false, message: "Category name required" });
     }
 
-    const trimmedName = name.trim();
-    
-    // Check if category already exists (including placeholder items)
-    const existingCategory = await Gallery.findOne({ 
-      category: trimmedName,
-      title: 'Category Placeholder'
-    });
-    
-    if (existingCategory) {
-      return res.status(400).json({
-        success: false,
-        message: 'Category already exists'
-      });
-    }
+    const trimmed = name.trim();
 
-    // Create a persistent placeholder gallery item with the new category
-    // This item will remain to track the category existence
-    const placeholderItem = await Gallery.create({
-      title: 'Category Placeholder',
-      description: 'Placeholder item for category tracking - do not delete',
-      category: trimmedName,
-      image: {
-        url: 'placeholder',
-        publicId: 'placeholder'
-      },
-      createdBy: req.user.id,
-      isActive: false, // Make it inactive so it doesn't show in public gallery
-      order: -1 // Use negative order to keep placeholders at the bottom
-    });
+    const id = uuid();
 
-    res.status(201).json({
-      success: true,
-      message: 'Category created successfully',
-      data: trimmedName
-    });
+    const placeholder = {
+      id,
+      title: "Category Placeholder",
+      description: "Auto created category placeholder",
+      category: trimmed,
+      image: { url: "placeholder", key: "placeholder" },
+      isActive: false,
+      createdAt: Date.now()
+    };
+
+    await ddb.send(new PutCommand({ TableName: TABLE, Item: placeholder }));
+
+    res.json({ success: true, message: "Category created", data: trimmed });
   } catch (error) {
-    console.error('Error creating category:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create category',
-      error: error.message
-    });
+    console.error("Create category error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Delete category
-// @route   DELETE /api/gallery/categories/:name
-// @access  Private (Admin)
+// -----------------------------------------
+//  DELETE CATEGORY
+// -----------------------------------------
 const deleteCategory = async (req, res) => {
   try {
-    const { name } = req.params;
-    
-    // Check if there are any active gallery items using this category
-    const activeItemsCount = await Gallery.countDocuments({ 
-      category: name, 
-      isActive: true,
-      title: { $ne: 'Category Placeholder' }
-    });
-    
-    if (activeItemsCount > 0) {
+    const category = req.params.name;
+
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
+    const items = result.Items || [];
+
+    const active = items.filter(
+      i => i.category === category && i.isActive && i.title !== "Category Placeholder"
+    ).length;
+
+    if (active > 0) {
       return res.status(400).json({
         success: false,
-        message: `Cannot delete category. There are ${activeItemsCount} active gallery items using this category.`
+        message: `Cannot delete. ${active} items using this category.`
       });
     }
 
-    // Find and delete the placeholder item for this category
-    await Gallery.deleteMany({ 
-      category: name, 
-      title: 'Category Placeholder' 
-    });
+    const placeholders = items.filter(
+      i => i.category === category && i.title === "Category Placeholder"
+    );
 
-    res.status(200).json({
-      success: true,
-      message: 'Category deleted successfully'
-    });
+    for (const p of placeholders) {
+      await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { id: p.id } }));
+    }
+
+    res.json({ success: true, message: "Category deleted" });
   } catch (error) {
-    console.error('Error deleting category:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete category',
-      error: error.message
-    });
+    console.error("Delete category error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 module.exports = {
+  upload,
   getGalleryItems,
   getGalleryItem,
   createGalleryItem,
