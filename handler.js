@@ -1,5 +1,5 @@
 // handler.js
-import { DynamoDBClient, GetItemCommand, PutItemCommand, ScanCommand, DeleteItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 
 // Initialize DynamoDB client
 const client = new DynamoDBClient({ region: "ap-south-1" });
