@@ -1,42 +1,76 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+// user.dynamodb.js
+const { v4: uuidv4 } = require("uuid");
+const AWS = require("aws-sdk");
+const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-  role: {
-    type: String,
-    enum: ['user', 'hr', 'admin'],
-    default: 'user',
-  },
-});
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+const TABLE_NAME = "Users";
 
-// Encrypt password using bcrypt
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
-    next();
-  }
+/**
+ * Create User
+ */
+exports.createUser = async (data) => {
+  const id = uuidv4();
+  const hashedPassword = await bcrypt.hash(data.password, 10);
 
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-});
+  const item = {
+    PK: `user#${id}`,
+    SK: "meta",
 
-// Match user entered password to hashed password in database
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+    id,
+    name: data.name,
+    email: data.email.toLowerCase(),
+    password: hashedPassword,
+    role: data.role || "user",
+  };
+
+  await dynamodb
+    .put({
+      TableName: TABLE_NAME,
+      Item: item,
+    })
+    .promise();
+
+  return item;
 };
 
-const User = mongoose.model('User', userSchema);
+/**
+ * Get User By Email
+ */
+exports.getUserByEmail = async (email) => {
+  const result = await dynamodb
+    .scan({
+      TableName: TABLE_NAME,
+      FilterExpression: "email = :email",
+      ExpressionAttributeValues: {
+        ":email": email.toLowerCase(),
+      },
+    })
+    .promise();
 
-module.exports = User;
+  return result.Items.length > 0 ? result.Items[0] : null;
+};
+
+/**
+ * Get User By ID
+ */
+exports.getUserById = async (id) => {
+  const result = await dynamodb
+    .get({
+      TableName: TABLE_NAME,
+      Key: {
+        PK: `user#${id}`,
+        SK: "meta",
+      },
+    })
+    .promise();
+
+  return result.Item || null;
+};
+
+/**
+ * Compare Password (like matchPassword method)
+ */
+exports.matchPassword = async (enteredPassword, storedHash) => {
+  return await bcrypt.compare(enteredPassword, storedHash);
+};
