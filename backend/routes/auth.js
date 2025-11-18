@@ -1,10 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { registerUser, authUser, getMe } = require('../controllers/authController');
-const { protect } = require('../middleware/authMiddleware');
 
-router.post('/register', registerUser);
-router.post('/login', authUser);
-router.get('/me', protect, getMe);
+const {
+  registerUserDynamo,
+  authUserDynamo,
+  getMeDynamo
+} = require('../controllers/authControllerDynamo');
+
+const { protectDynamo } = require('../middleware/authMiddlewareDynamo');
+
+// Register User (DynamoDB)
+router.post('/register', registerUserDynamo);
+
+// Login User (DynamoDB)
+router.post('/login', authUserDynamo);
+
+// Get Current User (DynamoDB)
+router.get('/me', protectDynamo, getMeDynamo);
 
 module.exports = router;
