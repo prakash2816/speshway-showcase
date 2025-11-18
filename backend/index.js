@@ -3,13 +3,10 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
-const connectDB = require('./config/db');
+const dynamoClient = require('./config/dynamodb');
 
 // Load env vars
 dotenv.config();
-
-// Connect to database
-connectDB();
 
 const app = express();
 
@@ -31,13 +28,14 @@ const corsOptions = {
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 
-// Enable CORS (handles preflight requests automatically)
 app.use(cors(corsOptions));
 
-// Serve static files from uploads directory
+// Serve uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
+// ============================
+// API ROUTES (DynamoDB-based)
+// ============================
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/contact', require('./routes/contact'));
 app.use('/api/services', require('./routes/services'));
@@ -47,43 +45,54 @@ app.use('/api/gallery', require('./routes/gallery'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/sentences', require('./routes/sentences'));
 
-// Health check endpoint
+// ============================
+// ROOT API HEALTH
+// ============================
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'API is running...',
     status: 'ok',
     timestamp: new Date().toISOString()
   });
 });
 
-// API health check
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok',
-    message: 'Backend API is healthy',
-    timestamp: new Date().toISOString(),
-    database: 'connected' // You can check DB connection status here
-  });
+// ============================
+// DYNAMODB HEALTH CHECK
+// ============================
+const { ListTablesCommand } = require("@aws-sdk/client-dynamodb");
+
+app.get('/api/health', async (req, res) => {
+  try {
+    await dynamoClient.send(new ListTablesCommand({}));
+
+    res.json({
+      status: 'ok',
+      message: 'Backend & DynamoDB healthy ✔️',
+      timestamp: new Date().toISOString(),
+      dynamodb: 'connected'
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      message: 'DynamoDB connection failed ❌',
+      error: err.message
+    });
+  }
 });
 
-// Error handling middleware
+// ============================
+// GLOBAL ERROR HANDLER
+// ============================
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        message: 'File size too large. Maximum size is 5MB'
+        message: 'File size too large. Max 5MB'
       });
     }
   }
-  
-  if (error.message && error.message.includes('Only PDF, DOC, and DOCX files')) {
-    return res.status(400).json({
-      success: false,
-      message: error.message
-    });
-  }
-  
+
   res.status(500).json({
     success: false,
     message: 'Internal server error',
@@ -91,6 +100,9 @@ app.use((error, req, res, next) => {
   });
 });
 
+// ============================
+// START SERVER
+// ============================
 const PORT = process.env.PORT || 5001;
 
-app.listen(PORT, console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
