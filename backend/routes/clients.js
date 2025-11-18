@@ -1,15 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const {
-  getClients,
-  getClient,
-  createClient,
-  updateClient,
-  deleteClient
-} = require('../controllers/clientController');
-const { protect, optionalProtect, admin } = require('../middleware/authMiddleware');
 
-router.route('/').get(optionalProtect, getClients).post(protect, admin, createClient);
-router.route('/:id').get(getClient).put(protect, admin, updateClient).delete(protect, admin, deleteClient);
+const {
+  getClientsDynamo,
+  getClientDynamo,
+  createClientDynamo,
+  updateClientDynamo,
+  deleteClientDynamo
+} = require('../controllers/clientControllerDynamo');
+
+const {
+  protectDynamo,
+  optionalProtectDynamo,
+  adminDynamo
+} = require('../middleware/authMiddlewareDynamo');
+
+router
+  .route('/')
+  .get(optionalProtectDynamo, getClientsDynamo)
+  .post(protectDynamo, adminDynamo, createClientDynamo);
+
+router
+  .route('/:id')
+  .get(getClientDynamo)
+  .put(protectDynamo, adminDynamo, updateClientDynamo)
+  .delete(protectDynamo, adminDynamo, deleteClientDynamo);
 
 module.exports = router;
