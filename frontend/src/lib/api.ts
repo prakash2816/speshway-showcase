@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Base API URL - can be configured via environment variable
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://dxhinve805.execute-api.ap-south-1.amazonaws.com/api';
 
 // Create axios instance with default config
 const api = axios.create({
