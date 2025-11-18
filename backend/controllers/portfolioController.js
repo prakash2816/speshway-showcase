@@ -1,50 +1,87 @@
-const Portfolio = require('../models/Portfolio');
-const { cloudinary } = require('../config/cloudinary');
+const { v4: uuidv4 } = require("uuid");
+const { cloudinary } = require("../config/cloudinary");
+const {
+  DynamoDBDocumentClient,
+  ScanCommand,
+  GetCommand,
+  PutCommand,
+  UpdateCommand,
+  DeleteCommand
+} = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 
-// @desc    Get all portfolios
-// @route   GET /api/portfolios
-// @access  Public
+const ddbClient = new DynamoDBClient({});
+const ddb = DynamoDBDocumentClient.from(ddbClient);
+
+const TABLE_NAME = "Portfolios";
+
+// ============================================================================
+// GET ALL PORTFOLIOS
+// ============================================================================
 const getPortfolios = async (req, res) => {
   try {
-    const portfolios = await Portfolio.find().sort({ createdAt: -1 });
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: TABLE_NAME
+      })
+    );
+
+    // Sort newest first (Dynamo doesn't sort)
+    const portfolios = result.Items.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
     res.json(portfolios);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get single portfolio
-// @route   GET /api/portfolios/:id
-// @access  Public
+// ============================================================================
+// GET SINGLE PORTFOLIO
+// ============================================================================
 const getPortfolio = async (req, res) => {
   try {
-    const portfolio = await Portfolio.findById(req.params.id);
-    if (!portfolio) {
-      return res.status(404).json({ message: 'Portfolio not found' });
+    const result = await ddb.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { id: req.params.id }
+      })
+    );
+
+    if (!result.Item) {
+      return res.status(404).json({ message: "Portfolio not found" });
     }
-    res.json(portfolio);
+
+    res.json(result.Item);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Create portfolio
-// @route   POST /api/portfolios
-// @access  Private/Admin
+// ============================================================================
+// CREATE PORTFOLIO
+// ============================================================================
 const createPortfolio = async (req, res) => {
   try {
+    const id = uuidv4();
+
     const portfolioData = {
+      id,
       title: req.body.title,
       category: req.body.category,
       description: req.body.description,
-      technologies: typeof req.body.technologies === 'string' 
-        ? JSON.parse(req.body.technologies) 
-        : req.body.technologies,
-      color: req.body.color || 'from-blue-500/20 to-cyan-500/20',
-      updatedAt: Date.now()
+      technologies:
+        typeof req.body.technologies === "string"
+          ? JSON.parse(req.body.technologies)
+          : req.body.technologies,
+      color: req.body.color || "from-blue-500/20 to-cyan-500/20",
+      image: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    // Handle image upload if present
+    // If image uploaded
     if (req.file) {
       portfolioData.image = {
         url: req.file.path,
@@ -52,81 +89,125 @@ const createPortfolio = async (req, res) => {
       };
     }
 
-    const portfolio = new Portfolio(portfolioData);
-    const createdPortfolio = await portfolio.save();
-    res.status(201).json(createdPortfolio);
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: portfolioData
+      })
+    );
+
+    res.status(201).json(portfolioData);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
 };
 
-// @desc    Update portfolio
-// @route   PUT /api/portfolios/:id
-// @access  Private/Admin
+// ============================================================================
+// UPDATE PORTFOLIO
+// ============================================================================
 const updatePortfolio = async (req, res) => {
   try {
-    const portfolio = await Portfolio.findById(req.params.id);
-    if (!portfolio) {
-      return res.status(404).json({ message: 'Portfolio not found' });
+    // Get existing portfolio
+    const existing = await ddb.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { id: req.params.id }
+      })
+    );
+
+    if (!existing.Item) {
+      return res.status(404).json({ message: "Portfolio not found" });
     }
 
-    // Delete old image from Cloudinary if new image is uploaded
-    if (req.file && portfolio.image.publicId) {
+    const portfolio = existing.Item;
+
+    // Delete old image if new uploaded
+    if (req.file && portfolio.image?.publicId) {
       try {
         await cloudinary.uploader.destroy(portfolio.image.publicId);
-      } catch (error) {
-        console.error('Error deleting old image:', error);
+      } catch (err) {
+        console.error("Cloudinary delete error:", err);
       }
     }
 
-    // Update portfolio fields
-    if (req.body.title) portfolio.title = req.body.title;
-    if (req.body.category) portfolio.category = req.body.category;
-    if (req.body.description) portfolio.description = req.body.description;
-    if (req.body.technologies) {
-      portfolio.technologies = typeof req.body.technologies === 'string' 
-        ? JSON.parse(req.body.technologies) 
-        : req.body.technologies;
-    }
-    if (req.body.color) portfolio.color = req.body.color;
-    
-    // Handle new image upload
-    if (req.file) {
-      portfolio.image = {
-        url: req.file.path,
-        publicId: req.file.filename
-      };
-    }
+    // Build updated fields
+    const updatedData = {
+      title: req.body.title || portfolio.title,
+      category: req.body.category || portfolio.category,
+      description: req.body.description || portfolio.description,
+      technologies: req.body.technologies
+        ? typeof req.body.technologies === "string"
+          ? JSON.parse(req.body.technologies)
+          : req.body.technologies
+        : portfolio.technologies,
+      color: req.body.color || portfolio.color,
+      image: req.file
+        ? {
+            url: req.file.path,
+            publicId: req.file.filename
+          }
+        : portfolio.image,
+      updatedAt: new Date().toISOString()
+    };
 
-    portfolio.updatedAt = Date.now();
-    const updatedPortfolio = await portfolio.save();
-    res.json(updatedPortfolio);
+    await ddb.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: { id: req.params.id },
+        UpdateExpression:
+          "SET title = :t, category = :c, description = :d, technologies = :tech, color = :col, image = :img, updatedAt = :u",
+        ExpressionAttributeValues: {
+          ":t": updatedData.title,
+          ":c": updatedData.category,
+          ":d": updatedData.description,
+          ":tech": updatedData.technologies,
+          ":col": updatedData.color,
+          ":img": updatedData.image,
+          ":u": updatedData.updatedAt
+        }
+      })
+    );
+
+    res.json({ id: req.params.id, ...updatedData });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
 };
 
-// @desc    Delete portfolio
-// @route   DELETE /api/portfolios/:id
-// @access  Private/Admin
+// ============================================================================
+// DELETE PORTFOLIO
+// ============================================================================
 const deletePortfolio = async (req, res) => {
   try {
-    const portfolio = await Portfolio.findById(req.params.id);
-    if (!portfolio) {
-      return res.status(404).json({ message: 'Portfolio not found' });
+    const existing = await ddb.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { id: req.params.id }
+      })
+    );
+
+    if (!existing.Item) {
+      return res.status(404).json({ message: "Portfolio not found" });
     }
 
-    // Delete image from Cloudinary if exists
-    if (portfolio.image.publicId) {
+    // Delete image from Cloudinary
+    if (existing.Item.image?.publicId) {
       try {
-        await cloudinary.uploader.destroy(portfolio.image.publicId);
-      } catch (error) {
-        console.error('Error deleting image:', error);
+        await cloudinary.uploader.destroy(existing.Item.image.publicId);
+      } catch (err) {
+        console.error("Image delete error:", err);
       }
     }
 
-    await portfolio.deleteOne();
-    res.json({ message: 'Portfolio removed' });
+    // Delete item from table
+    await ddb.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: { id: req.params.id }
+      })
+    );
+
+    res.json({ message: "Portfolio removed" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -139,4 +220,3 @@ module.exports = {
   updatePortfolio,
   deletePortfolio
 };
-
