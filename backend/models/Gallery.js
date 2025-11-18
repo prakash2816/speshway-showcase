@@ -1,103 +1,123 @@
-const mongoose = require('mongoose');
+// gallery.dynamodb.js
+const { v4: uuidv4 } = require("uuid");
+const AWS = require("aws-sdk");
 
-const gallerySchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 100
-  },
-  description: {
-    type: String,
-    required: true,
-    maxlength: 500
-  },
-  image: {
-    url: {
-      type: String,
-      required: true
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+
+const TABLE_NAME = "Gallery";
+
+// Create a new gallery item
+exports.createGallery = async (data) => {
+  const id = uuidv4();
+  const timestamp = Date.now();
+
+  const item = {
+    PK: `gallery#${id}`,
+    SK: "meta",
+
+    // Gallery fields
+    id,
+    title: data.title,
+    description: data.description,
+
+    image: {
+      url: data.image.url,
+      publicId: data.image.publicId,
     },
-    publicId: {
-      type: String,
-      required: true
-    }
-  },
-  category: {
-    type: String,
-    required: true,
-    index: true
-  },
-  date: {
-    type: Date,
-    required: true,
-    default: Date.now
-  },
-  location: {
-    type: String,
-    trim: true,
-    maxlength: 100
-  },
-  readMoreLink: {
-    type: String,
-    trim: true,
-    validate: {
-      validator: function(v) {
-        return !v || /^https?:\/\/.+/.test(v);
+
+    category: data.category,
+    date: data.date || timestamp,
+    location: data.location || "",
+    readMoreLink: data.readMoreLink || "",
+    isActive: data.isActive ?? true,
+    order: data.order || timestamp,
+
+    createdBy: data.createdBy,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  await dynamodb
+    .put({
+      TableName: TABLE_NAME,
+      Item: item,
+    })
+    .promise();
+
+  return item;
+};
+
+// Get gallery item by ID
+exports.getGalleryById = async (id) => {
+  const result = await dynamodb
+    .get({
+      TableName: TABLE_NAME,
+      Key: {
+        PK: `gallery#${id}`,
+        SK: "meta",
       },
-      message: 'Please enter a valid URL'
-    }
-  },
-  isActive: {
-    type: Boolean,
-    default: true,
-    index: true
-  },
-  order: {
-    type: Number,
-    default: 0,
-    index: true
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+    })
+    .promise();
 
-// Indexes for better query performance
-gallerySchema.index({ category: 1, date: -1 });
-gallerySchema.index({ isActive: 1, date: -1 });
-gallerySchema.index({ createdAt: -1 });
+  return result.Item;
+};
 
-// Virtual for formatted date
-gallerySchema.virtual('formattedDate').get(function() {
-  return this.date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-});
+// Update gallery item
+exports.updateGallery = async (id, updates) => {
+  const timestamp = Date.now();
 
-// Virtual for short description
-gallerySchema.virtual('shortDescription').get(function() {
-  return this.description.length > 100 
-    ? this.description.substring(0, 100) + '...' 
-    : this.description;
-});
+  const params = {
+    TableName: TABLE_NAME,
+    Key: {
+      PK: `gallery#${id}`,
+      SK: "meta",
+    },
+    UpdateExpression: `
+      set 
+        title = :title,
+        description = :description,
+        image = :image,
+        category = :category,
+        date = :date,
+        location = :location,
+        readMoreLink = :readMoreLink,
+        isActive = :isActive,
+        #order = :order,
+        updatedAt = :updatedAt
+    `,
+    ExpressionAttributeNames: {
+      "#order": "order",
+    },
+    ExpressionAttributeValues: {
+      ":title": updates.title,
+      ":description": updates.description,
+      ":image": updates.image,
+      ":category": updates.category,
+      ":date": updates.date || timestamp,
+      ":location": updates.location || "",
+      ":readMoreLink": updates.readMoreLink || "",
+      ":isActive": updates.isActive,
+      ":order": updates.order || timestamp,
+      ":updatedAt": timestamp,
+    },
+    ReturnValues: "ALL_NEW",
+  };
 
-// Pre-save middleware to ensure order is set if not provided
-gallerySchema.pre('save', function(next) {
-  if (this.isNew && this.order === 0) {
-    // Set order to current timestamp for new items
-    this.order = Date.now();
-  }
-  next();
-});
+  const result = await dynamodb.update(params).promise();
+  return result.Attributes;
+};
 
-const Gallery = mongoose.model('Gallery', gallerySchema);
+// Delete gallery item
+exports.deleteGallery = async (id) => {
+  await dynamodb
+    .delete({
+      TableName: TABLE_NAME,
+      Key: {
+        PK: `gallery#${id}`,
+        SK: "meta",
+      },
+    })
+    .promise();
 
-module.exports = Gallery;
+  return { message: "Gallery item deleted successfully" };
+};
