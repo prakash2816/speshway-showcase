@@ -1,17 +1,38 @@
 const express = require('express');
 const router = express.Router();
-const {
-  getPortfolios,
-  getPortfolio,
-  createPortfolio,
-  updatePortfolio,
-  deletePortfolio
-} = require('../controllers/portfolioController');
-const { protect, admin } = require('../middleware/authMiddleware');
-const { uploadPortfolioImage } = require('../config/cloudinary');
 
-router.route('/').get(getPortfolios).post(protect, admin, uploadPortfolioImage.single('image'), createPortfolio);
-router.route('/:id').get(getPortfolio).put(protect, admin, uploadPortfolioImage.single('image'), updatePortfolio).delete(protect, admin, deletePortfolio);
+const {
+  getPortfoliosDynamo,
+  getPortfolioDynamo,
+  createPortfolioDynamo,
+  updatePortfolioDynamo,
+  deletePortfolioDynamo
+} = require('../controllers/portfolioControllerDynamo');
+
+const { protectDynamo, adminDynamo } = require('../middleware/authMiddlewareDynamo');
+
+const { uploadPortfolioImageDynamo } = require('../config/cloudinaryDynamo');
+
+// Routes
+router
+  .route('/')
+  .get(getPortfoliosDynamo)
+  .post(
+    protectDynamo,
+    adminDynamo,
+    uploadPortfolioImageDynamo.single('image'),
+    createPortfolioDynamo
+  );
+
+router
+  .route('/:id')
+  .get(getPortfolioDynamo)
+  .put(
+    protectDynamo,
+    adminDynamo,
+    uploadPortfolioImageDynamo.single('image'),
+    updatePortfolioDynamo
+  )
+  .delete(protectDynamo, adminDynamo, deletePortfolioDynamo);
 
 module.exports = router;
-
