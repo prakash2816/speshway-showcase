@@ -1,76 +1,131 @@
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const User = require('./models/User');
-const connectDB = require('./config/db');
-
+const dotenv = require("dotenv");
 dotenv.config();
 
-// Admin credentials - Update these as needed
+const bcrypt = require("bcryptjs");
+const {
+  PutItemCommand,
+  DeleteItemCommand,
+  ScanCommand,
+} = require("@aws-sdk/client-dynamodb");
+
+const dynamo = require("./config/dynamodb");
+const TABLE = process.env.DYNAMODB_TABLE;
+
+// Admin users to seed
 const users = [
   {
-    name: 'Admin User',
-    email: 'admin@speshway.com',
-    password: 'Admin123!',
-    role: 'admin',
+    name: "Admin User",
+    email: "admin@speshway.com",
+    password: "Admin123!",
+    role: "admin",
   },
   {
-    name: 'Super Admin',
-    email: 'superadmin@speshway.com',
-    password: 'SuperAdmin123!',
-    role: 'admin',
+    name: "Super Admin",
+    email: "superadmin@speshway.com",
+    password: "SuperAdmin123!",
+    role: "admin",
   },
   {
-    name: 'Administrator',
-    email: 'administrator@speshway.com',
-    password: 'Admin@2024',
-    role: 'admin',
+    name: "Administrator",
+    email: "administrator@speshway.com",
+    password: "Admin@2024",
+    role: "admin",
   },
   {
-    name: 'HR Manager',
-    email: 'hr@speshway.com',
-    password: 'HrManager123!',
-    role: 'hr',
+    name: "HR Manager",
+    email: "hr@speshway.com",
+    password: "HrManager123!",
+    role: "hr",
   },
 ];
 
-connectDB();    
-
+// ===========================
+// IMPORT USERS (Insert)
+// ===========================
 const importData = async () => {
   try {
-    await User.deleteMany();
+    console.log("Deleting old user records...");
+    await destroyOnlyUsers();
 
-    // Use User.create() for each user to trigger pre-save hooks for password hashing
-    const createdUsers = [];
+    console.log("Seeding new users...");
+
     for (const user of users) {
-      const createdUser = await User.create(user);
-      createdUsers.push(createdUser);
+      // Hash the password
+      const hashedPassword = await bcrypt.hash(user.password, 10);
+
+      const params = {
+        TableName: TABLE,
+        Item: {
+          PK: { S: `USER#${user.email}` },
+          SK: { S: `USER#${user.email}` }, // one-item entity
+          name: { S: user.name },
+          email: { S: user.email },
+          password: { S: hashedPassword },
+          role: { S: user.role },
+          createdAt: { S: new Date().toISOString() },
+        },
+      };
+
+      await dynamo.send(new PutItemCommand(params));
     }
 
-    console.log('Data Imported!');
-    console.log(`Admin users created: ${createdUsers.length}`);
-    console.log('\nAdmin Login Credentials:');
-    console.log('Email: admin@speshway.com');
-    console.log('Password: Admin123!');
+    console.log("Data Imported Successfully!");
+    console.log(`Admins Created: ${users.length}`);
+
+    console.log("\nAdmin Login Credentials:");
+    console.log("Email: admin@speshway.com");
+    console.log("Password: Admin123!");
+
     process.exit();
   } catch (error) {
-    console.error(`Error importing data: ${error}`);
+    console.error("Import Error:", error);
     process.exit(1);
   }
 };
 
-const destroyData = async () => {
+// ===========================
+// DELETE ONLY USERS
+// ===========================
+const destroyOnlyUsers = async () => {
   try {
-    await User.deleteMany();
+    const existingUsers = await dynamo.send(
+      new ScanCommand({
+        TableName: TABLE,
+        FilterExpression: "begins_with(PK, :pk)",
+        ExpressionAttributeValues: {
+          ":pk": { S: "USER#" },
+        },
+      })
+    );
 
-    console.log('Data Destroyed!');
-    process.exit();
-  } catch (error) {
-    console.error(`${error}`);
-    process.exit(1);
+    for (const item of existingUsers.Items) {
+      await dynamo.send(
+        new DeleteItemCommand({
+          TableName: TABLE,
+          Key: {
+            PK: item.PK,
+            SK: item.SK,
+          },
+        })
+      );
+    }
+
+    console.log("All users removed.");
+  } catch (err) {
+    console.error("Destroy Error:", err);
   }
 };
 
-if (process.argv[2] === '-d') {
+// ===========================
+// DESTROY MODE (CLI)
+// ===========================
+const destroyData = async () => {
+  await destroyOnlyUsers();
+  process.exit();
+};
+
+// If "-d", destroy; else import
+if (process.argv[2] === "-d") {
   destroyData();
 } else {
   importData();
