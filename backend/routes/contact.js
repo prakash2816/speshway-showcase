@@ -1,24 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const {
-  submitContact,
-  getSubmissions,
-  getSubmission,
-  updateSubmissionStatus,
-  replyToSubmission,
-  deleteSubmission,
-  upload
-} = require('../controllers/contactController');
-const { protect, admin } = require('../middleware/authMiddleware');
 
-// Public routes
-router.post('/submit', upload.single('resume'), submitContact);
+const {
+  submitContactDynamo,
+  getSubmissionsDynamo,
+  getSubmissionDynamo,
+  updateSubmissionStatusDynamo,
+  replyToSubmissionDynamo,
+  deleteSubmissionDynamo,
+  uploadDynamo
+} = require('../controllers/contactControllerDynamo');
+
+const {
+  protectDynamo,
+  adminDynamo
+} = require('../middleware/authMiddlewareDynamo');
+
+// Public route
+router.post('/submit', uploadDynamo.single('resume'), submitContactDynamo);
 
 // Admin routes (protected)
-router.get('/submissions', protect, admin, getSubmissions);
-router.get('/submission/:id', protect, admin, getSubmission);
-router.put('/submission/:id/status', protect, admin, updateSubmissionStatus);
-router.post('/submission/:id/reply', protect, admin, replyToSubmission);
-router.delete('/submission/:id', protect, admin, deleteSubmission);
+router.get('/submissions', protectDynamo, adminDynamo, getSubmissionsDynamo);
+router.get('/submission/:id', protectDynamo, adminDynamo, getSubmissionDynamo);
+router.put('/submission/:id/status', protectDynamo, adminDynamo, updateSubmissionStatusDynamo);
+router.post('/submission/:id/reply', protectDynamo, adminDynamo, replyToSubmissionDynamo);
+router.delete('/submission/:id', protectDynamo, adminDynamo, deleteSubmissionDynamo);
 
 module.exports = router;
