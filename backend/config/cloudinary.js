@@ -16,7 +16,7 @@ const createCloudinaryStorage = (folder) => {
         {
           folder: folder,
           resource_type: 'image',
-          transformation: folder === 'speshway/portfolios' 
+          transformation: folder === 'speshway/portfolios'
             ? [{ width: 1200, height: 800, crop: 'limit', quality: 'auto' }]
             : [{ width: 500, height: 500, crop: 'fill', gravity: 'face', quality: 'auto' }],
         },
@@ -91,4 +91,3 @@ module.exports = {
   uploadTeamImage,
   uploadGalleryImage,
 };
-
