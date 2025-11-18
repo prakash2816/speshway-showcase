@@ -1,80 +1,154 @@
-const Service = require('../models/Service');
+const { v4: uuidv4 } = require("uuid");
+const {
+  DynamoDBDocumentClient,
+  ScanCommand,
+  GetCommand,
+  PutCommand,
+  UpdateCommand,
+  DeleteCommand
+} = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 
-// @desc    Get all services
-// @route   GET /api/services
-// @access  Public
+// DynamoDB Client
+const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const ddb = DynamoDBDocumentClient.from(ddbClient);
+
+const TABLE = "Services";
+
+// ============================================================================
+// GET ALL SERVICES
+// ============================================================================
 const getServices = async (req, res) => {
   try {
-    const services = await Service.find().sort({ createdAt: -1 });
+    const result = await ddb.send(
+      new ScanCommand({ TableName: TABLE })
+    );
+
+    // Sort newest first
+    const services = result.Items.sort((a, b) => b.createdAt - a.createdAt);
+
     res.json(services);
   } catch (error) {
+    console.error("Get services error:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get single service
-// @route   GET /api/services/:id
-// @access  Public
+// ============================================================================
+// GET SINGLE SERVICE
+// ============================================================================
 const getService = async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ message: 'Service not found' });
+    const result = await ddb.send(
+      new GetCommand({
+        TableName: TABLE,
+        Key: { id: req.params.id }
+      })
+    );
+
+    if (!result.Item) {
+      return res.status(404).json({ message: "Service not found" });
     }
-    res.json(service);
+
+    res.json(result.Item);
   } catch (error) {
+    console.error("Get service error:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Create service
-// @route   POST /api/services
-// @access  Private/Admin
+// ============================================================================
+// CREATE SERVICE
+// ============================================================================
 const createService = async (req, res) => {
   try {
-    const service = new Service({
+    const id = uuidv4();
+
+    const newService = {
+      id,
       ...req.body,
+      createdAt: Date.now(),
       updatedAt: Date.now()
-    });
-    const createdService = await service.save();
-    res.status(201).json(createdService);
+    };
+
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: newService
+      })
+    );
+
+    res.status(201).json(newService);
   } catch (error) {
+    console.error("Create service error:", error);
     res.status(400).json({ message: error.message });
   }
 };
 
-// @desc    Update service
-// @route   PUT /api/services/:id
-// @access  Private/Admin
+// ============================================================================
+// UPDATE SERVICE
+// ============================================================================
 const updateService = async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ message: 'Service not found' });
+    // Check if exists
+    const existing = await ddb.send(
+      new GetCommand({
+        TableName: TABLE,
+        Key: { id: req.params.id }
+      })
+    );
+
+    if (!existing.Item) {
+      return res.status(404).json({ message: "Service not found" });
     }
 
-    Object.assign(service, req.body);
-    service.updatedAt = Date.now();
-    const updatedService = await service.save();
-    res.json(updatedService);
+    // Merge fields
+    const updated = {
+      ...existing.Item,
+      ...req.body,
+      updatedAt: Date.now()
+    };
+
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: updated
+      })
+    );
+
+    res.json(updated);
   } catch (error) {
+    console.error("Update service error:", error);
     res.status(400).json({ message: error.message });
   }
 };
 
-// @desc    Delete service
-// @route   DELETE /api/services/:id
-// @access  Private/Admin
+// ============================================================================
+// DELETE SERVICE
+// ============================================================================
 const deleteService = async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ message: 'Service not found' });
+    const existing = await ddb.send(
+      new GetCommand({
+        TableName: TABLE,
+        Key: { id: req.params.id }
+      })
+    );
+
+    if (!existing.Item) {
+      return res.status(404).json({ message: "Service not found" });
     }
 
-    await service.deleteOne();
-    res.json({ message: 'Service removed' });
+    await ddb.send(
+      new DeleteCommand({
+        TableName: TABLE,
+        Key: { id: req.params.id }
+      })
+    );
+
+    res.json({ message: "Service removed" });
   } catch (error) {
+    console.error("Delete service error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -86,4 +160,3 @@ module.exports = {
   updateService,
   deleteService
 };
-
