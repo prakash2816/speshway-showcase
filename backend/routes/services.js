@@ -20,7 +20,7 @@ router
 // Admin protected routes
 router
   .route('/:id')
-  .get(getServiceDynamo)
+  .get(getService)
   .put(protect, admin, updateService)
   .delete(protect, admin, deleteService);
 
