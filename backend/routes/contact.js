@@ -6,8 +6,8 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 
 const {
-  submitContact,
-  getSubmissions,
+  submitContactDynamo,
+  getSubmissionsDynamo,
   getSubmission,
   updateSubmissionStatus,
   replyToSubmission,
