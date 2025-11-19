@@ -2,10 +2,10 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  registerUserDynamo,
-  authUserDynamo,
-  getMeDynamo,
-  getUsersDynamo, // make sure this is exported from your controller
+  registerUser,
+  authUser,
+  getMe,
+  getUsers, // make sure this is exported from your controller
 } = require("../controllers/authControllerDynamo");
 
 const { protectDynamo } = require("../middleware/authMiddlewareDynamo");
@@ -15,19 +15,19 @@ const { protectDynamo } = require("../middleware/authMiddlewareDynamo");
 // ------------------------
 
 // Register User
-router.post("/register", registerUserDynamo);
+router.post("/register", registerUser);
 
 // Login User
-router.post("/login", authUserDynamo);
+router.post("/login", authUser);
 
 // Get Current User (protected)
-router.get("/me", protectDynamo, getMeDynamo);
+router.get("/me", protect, getMe);
 
 // ------------------------
 // Users Routes
 // ------------------------
 
 // Get All Users
-router.get("/users", getUsersDynamo);
+router.get("/users", getUsers);
 
 module.exports = router;
