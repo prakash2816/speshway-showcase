@@ -3,30 +3,30 @@ const router = express.Router();
 const multer = require('multer');
 
 // Multer setup for memory storage (works well with Lambda)
-const uploadDynamo = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage() });
 
 const {
-  submitContactDynamo,
-  getSubmissionsDynamo,
-  getSubmissionDynamo,
-  updateSubmissionStatusDynamo,
-  replyToSubmissionDynamo,
-  deleteSubmissionDynamo
-} = require('../controllers/contactControllerDynamo');
+  submitContact,
+  getSubmissions,
+  getSubmission,
+  updateSubmissionStatus,
+  replyToSubmission,
+  deleteSubmission
+} = require('../controllers/contactController');
 
 const {
-  protectDynamo,
-  adminDynamo
-} = require('../middleware/authMiddlewareDynamo');
+  protect,
+  admin
+} = require('../middleware/authMiddleware');
 
 // Public route: submit contact form with resume upload
-router.post('/submit', uploadDynamo.single('resume'), submitContactDynamo);
+router.post('/submit', upload.single('resume'), submitContact);
 
 // Admin routes (protected)
-router.get('/submissions', protectDynamo, adminDynamo, getSubmissionsDynamo);
-router.get('/submission/:id', protectDynamo, adminDynamo, getSubmissionDynamo);
-router.put('/submission/:id/status', protectDynamo, adminDynamo, updateSubmissionStatusDynamo);
-router.post('/submission/:id/reply', protectDynamo, adminDynamo, replyToSubmissionDynamo);
-router.delete('/submission/:id', protectDynamo, adminDynamo, deleteSubmissionDynamo);
+router.get('/submissions', protect, admin, getSubmissions);
+router.get('/submission/:id', protect, admin, getSubmission);
+router.put('/submission/:id/status', protect, admin, updateSubmissionStatus);
+router.post('/submission/:id/reply', protect, admin, replyToSubmission);
+router.delete('/submission/:id', protect, admin, deleteSubmission);
 
 module.exports = router;
