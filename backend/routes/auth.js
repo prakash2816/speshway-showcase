@@ -6,9 +6,9 @@ const {
   authUserDynamo,
   getMeDynamo,
   getUsersDynamo, // make sure this is exported from your controller
-} = require("../controllers/authController");
+} = require("../controllers/authControllerDynamo");
 
-const { protectDynamo } = require("../middleware/authMiddleware");
+const { protectDynamo } = require("../middleware/authMiddlewareDynamo");
 
 // ------------------------
 // Auth Routes
