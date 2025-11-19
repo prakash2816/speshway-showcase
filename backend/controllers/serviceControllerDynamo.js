@@ -4,7 +4,6 @@ const {
   ScanCommand,
   GetCommand,
   PutCommand,
-  UpdateCommand,
   DeleteCommand
 } = require("@aws-sdk/lib-dynamodb");
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
@@ -18,13 +17,10 @@ const TABLE = "Services";
 // ============================================================================
 // GET ALL SERVICES
 // ============================================================================
-const getServices = async (req, res) => {
+const getServicesDynamo = async (req, res) => {
   try {
-    const result = await ddb.send(
-      new ScanCommand({ TableName: TABLE })
-    );
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
 
-    // Sort newest first
     const services = result.Items.sort((a, b) => b.createdAt - a.createdAt);
 
     res.json(services);
@@ -37,7 +33,7 @@ const getServices = async (req, res) => {
 // ============================================================================
 // GET SINGLE SERVICE
 // ============================================================================
-const getService = async (req, res) => {
+const getServiceDynamo = async (req, res) => {
   try {
     const result = await ddb.send(
       new GetCommand({
@@ -60,7 +56,7 @@ const getService = async (req, res) => {
 // ============================================================================
 // CREATE SERVICE
 // ============================================================================
-const createService = async (req, res) => {
+const createServiceDynamo = async (req, res) => {
   try {
     const id = uuidv4();
 
@@ -88,9 +84,8 @@ const createService = async (req, res) => {
 // ============================================================================
 // UPDATE SERVICE
 // ============================================================================
-const updateService = async (req, res) => {
+const updateServiceDynamo = async (req, res) => {
   try {
-    // Check if exists
     const existing = await ddb.send(
       new GetCommand({
         TableName: TABLE,
@@ -102,7 +97,6 @@ const updateService = async (req, res) => {
       return res.status(404).json({ message: "Service not found" });
     }
 
-    // Merge fields
     const updated = {
       ...existing.Item,
       ...req.body,
@@ -126,7 +120,7 @@ const updateService = async (req, res) => {
 // ============================================================================
 // DELETE SERVICE
 // ============================================================================
-const deleteService = async (req, res) => {
+const deleteServiceDynamo = async (req, res) => {
   try {
     const existing = await ddb.send(
       new GetCommand({
@@ -154,9 +148,9 @@ const deleteService = async (req, res) => {
 };
 
 module.exports = {
-  getServices,
-  getService,
-  createService,
-  updateService,
-  deleteService
+  getServicesDynamo,
+  getServiceDynamo,
+  createServiceDynamo,
+  updateServiceDynamo,
+  deleteServiceDynamo
 };
