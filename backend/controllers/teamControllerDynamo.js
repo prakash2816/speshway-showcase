@@ -1,20 +1,32 @@
 const { v4: uuidv4 } = require("uuid");
-const AWS = require("aws-sdk");
-const { cloudinary } = require("../config/cloudinary");
+const { cloudinary } = require("../config/cloudinaryDynamo");
 
-const dynamo = new AWS.DynamoDB.DocumentClient();
+// AWS SDK v3
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const {
+  DynamoDBDocumentClient,
+  ScanCommand,
+  GetCommand,
+  PutCommand,
+  DeleteCommand
+} = require("@aws-sdk/lib-dynamodb");
+
+const client = new DynamoDBClient({ region: process.env.AWS_REGION });
+const dynamo = DynamoDBDocumentClient.from(client);
+
 const TABLE_NAME = process.env.TEAM_TABLE;
 
-// ============== GET ALL TEAM MEMBERS (SCAN) ==============
+// ======================================
+// GET ALL TEAM MEMBERS (SCAN)
+// ======================================
 const getTeamMembers = async (req, res) => {
   try {
     const params = {
-      TableName: TABLE_NAME,
+      TableName: TABLE_NAME
     };
 
-    const data = await dynamo.scan(params).promise();
+    const data = await dynamo.send(new ScanCommand(params));
 
-    // Sort by createdAt desc
     const sorted = data.Items.sort((a, b) => b.createdAt - a.createdAt);
 
     res.json(sorted);
@@ -23,17 +35,20 @@ const getTeamMembers = async (req, res) => {
   }
 };
 
-// ============== GET SINGLE TEAM MEMBER ==============
+// ======================================
+// GET SINGLE TEAM MEMBER
+// ======================================
 const getTeamMember = async (req, res) => {
   try {
     const params = {
       TableName: TABLE_NAME,
-      Key: { id: req.params.id },
+      Key: { id: req.params.id }
     };
 
-    const data = await dynamo.get(params).promise();
+    const data = await dynamo.send(new GetCommand(params));
 
-    if (!data.Item) return res.status(404).json({ message: "Team member not found" });
+    if (!data.Item)
+      return res.status(404).json({ message: "Team member not found" });
 
     res.json(data.Item);
   } catch (error) {
@@ -41,7 +56,9 @@ const getTeamMember = async (req, res) => {
   }
 };
 
-// ============== CREATE TEAM MEMBER ==============
+// ======================================
+// CREATE TEAM MEMBER
+// ======================================
 const createTeamMember = async (req, res) => {
   try {
     const id = uuidv4();
@@ -57,16 +74,16 @@ const createTeamMember = async (req, res) => {
     if (req.file) {
       memberData.image = {
         url: req.file.path,
-        publicId: req.file.filename,
+        publicId: req.file.filename
       };
     }
 
     const params = {
       TableName: TABLE_NAME,
-      Item: memberData,
+      Item: memberData
     };
 
-    await dynamo.put(params).promise();
+    await dynamo.send(new PutCommand(params));
 
     res.status(201).json(memberData);
   } catch (error) {
@@ -74,25 +91,27 @@ const createTeamMember = async (req, res) => {
   }
 };
 
-// ============== UPDATE TEAM MEMBER ==============
+// ======================================
+// UPDATE TEAM MEMBER
+// ======================================
 const updateTeamMember = async (req, res) => {
   try {
     const id = req.params.id;
 
-    // Fetch existing item
-    const existing = await dynamo
-      .get({ TableName: TABLE_NAME, Key: { id } })
-      .promise();
+    const existing = await dynamo.send(
+      new GetCommand({ TableName: TABLE_NAME, Key: { id } })
+    );
 
-    if (!existing.Item) return res.status(404).json({ message: "Team member not found" });
+    if (!existing.Item)
+      return res.status(404).json({ message: "Team member not found" });
 
     const updatedMember = {
       ...existing.Item,
       ...req.body,
-      updatedAt: Date.now(),
+      updatedAt: Date.now()
     };
 
-    // Handle new image
+    // Handle new image upload
     if (req.file) {
       if (existing.Item.image?.publicId) {
         try {
@@ -104,16 +123,16 @@ const updateTeamMember = async (req, res) => {
 
       updatedMember.image = {
         url: req.file.path,
-        publicId: req.file.filename,
+        publicId: req.file.filename
       };
     }
 
     const params = {
       TableName: TABLE_NAME,
-      Item: updatedMember,
+      Item: updatedMember
     };
 
-    await dynamo.put(params).promise();
+    await dynamo.send(new PutCommand(params));
 
     res.json(updatedMember);
   } catch (error) {
@@ -121,18 +140,21 @@ const updateTeamMember = async (req, res) => {
   }
 };
 
-// ============== DELETE TEAM MEMBER ==============
+// ======================================
+// DELETE TEAM MEMBER
+// ======================================
 const deleteTeamMember = async (req, res) => {
   try {
     const id = req.params.id;
 
-    const existing = await dynamo
-      .get({ TableName: TABLE_NAME, Key: { id } })
-      .promise();
+    const existing = await dynamo.send(
+      new GetCommand({ TableName: TABLE_NAME, Key: { id } })
+    );
 
-    if (!existing.Item) return res.status(404).json({ message: "Team member not found" });
+    if (!existing.Item)
+      return res.status(404).json({ message: "Team member not found" });
 
-    // Delete image
+    // Delete image from Cloudinary
     if (existing.Item.image?.publicId) {
       try {
         await cloudinary.uploader.destroy(existing.Item.image.publicId);
@@ -141,12 +163,9 @@ const deleteTeamMember = async (req, res) => {
       }
     }
 
-    const params = {
-      TableName: TABLE_NAME,
-      Key: { id },
-    };
-
-    await dynamo.delete(params).promise();
+    await dynamo.send(
+      new DeleteCommand({ TableName: TABLE_NAME, Key: { id } })
+    );
 
     res.json({ message: "Team member removed" });
   } catch (error) {
