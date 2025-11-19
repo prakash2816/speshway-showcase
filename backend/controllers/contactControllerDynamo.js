@@ -16,7 +16,6 @@ const sendEmail = require("../utils/email");
 // AWS Clients
 const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const ddb = DynamoDBDocumentClient.from(ddbClient);
-
 const s3 = new S3Client({ region: process.env.AWS_REGION });
 const BUCKET = process.env.AWS_S3_BUCKET;
 
@@ -35,7 +34,7 @@ const uploadDynamo = multer({
 const TABLE = process.env.AWS_DYNAMO_CONTACT_TABLE || "ContactTable";
 
 // ------------------------------------------------------------
-// ✅ Submit Contact / Resume
+// Submit Contact / Resume
 // ------------------------------------------------------------
 const submitContactDynamo = async (req, res) => {
   try {
@@ -72,7 +71,6 @@ const submitContactDynamo = async (req, res) => {
     }
 
     const id = uuid();
-
     const item = {
       id,
       name,
@@ -108,7 +106,7 @@ const submitContactDynamo = async (req, res) => {
 };
 
 // ------------------------------------------------------------
-// ✅ Get All Submissions
+// Get All Submissions
 // ------------------------------------------------------------
 const getSubmissionsDynamo = async (req, res) => {
   try {
@@ -122,90 +120,10 @@ const getSubmissionsDynamo = async (req, res) => {
 };
 
 // ------------------------------------------------------------
-// ✅ Get Single Submission
-// ------------------------------------------------------------
-const getSubmission = async (req, res) => {
-  try {
-    const { Item } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { id: req.params.id } }));
-    if (!Item) return res.status(404).json({ success: false, message: "Not found" });
-    res.json({ success: true, data: Item });
-  } catch (error) {
-    console.error("Get submission error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ------------------------------------------------------------
-// ✅ Update Submission Status
-// ------------------------------------------------------------
-const updateSubmissionStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-    const result = await ddb.send(
-      new UpdateCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id },
-        UpdateExpression: "set #s = :s",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":s": status },
-        ReturnValues: "ALL_NEW"
-      })
-    );
-    res.json({ success: true, message: "Status updated", data: result.Attributes });
-  } catch (error) {
-    console.error("Status update error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ------------------------------------------------------------
-// ✅ Reply to Submission
-// ------------------------------------------------------------
-const replyToSubmission = async (req, res) => {
-  try {
-    const { message } = req.body;
-    const replyObj = { id: uuid(), message, repliedBy: req.user?.name || "Admin", repliedAt: Date.now() };
-
-    const result = await ddb.send(
-      new UpdateCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id },
-        UpdateExpression: "SET replies = list_append(if_not_exists(replies, :empty), :r), #s = :replied",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":r": [replyObj], ":empty": [], ":replied": "replied" },
-        ReturnValues: "ALL_NEW"
-      })
-    );
-
-    res.json({ success: true, message: "Reply added", data: result.Attributes });
-  } catch (error) {
-    console.error("Reply error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ------------------------------------------------------------
-// ✅ Delete Submission
-// ------------------------------------------------------------
-const deleteSubmission = async (req, res) => {
-  try {
-    await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { id: req.params.id } }));
-    res.json({ success: true, message: "Submission deleted" });
-  } catch (error) {
-    console.error("Delete submission error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ------------------------------------------------------------
-// EXPORTS
+// Export only the needed items
 // ------------------------------------------------------------
 module.exports = {
-  upload,
+  uploadDynamo,          // used in routes as uploadDynamo.single('resume')
   submitContactDynamo,
-  getSubmissionsDynamo,
-  getSubmission,
-  updateSubmissionStatus,
-  replyToSubmission,
-  deleteSubmission,
+  getSubmissionsDynamo
 };
