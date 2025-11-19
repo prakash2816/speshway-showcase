@@ -9,7 +9,7 @@ const {
   deletePortfolioDynamo
 } = require('../controllers/portfolioControllerDynamo');
 
-const { protectDynamo, adminDynamo } = require('../middleware/authMiddlewareDynamo');
+const { protect, admin } = require('../middleware/authMiddlewareDynamo');
 
 const { uploadPortfolioImageDynamo } = require('../config/cloudinaryDynamo');
 
@@ -18,8 +18,8 @@ router
   .route('/')
   .get(getPortfoliosDynamo)
   .post(
-    protectDynamo,
-    adminDynamo,
+    protect,
+    admin,
     uploadPortfolioImageDynamo.single('image'),
     createPortfolioDynamo
   );
@@ -28,11 +28,11 @@ router
   .route('/:id')
   .get(getPortfolioDynamo)
   .put(
-    protectDynamo,
-    adminDynamo,
+    protect,
+    admin,
     uploadPortfolioImageDynamo.single('image'),
     updatePortfolioDynamo
   )
-  .delete(protectDynamo, adminDynamo, deletePortfolioDynamo);
+  .delete(protect, admin, deletePortfolioDynamo);
 
 module.exports = router;
