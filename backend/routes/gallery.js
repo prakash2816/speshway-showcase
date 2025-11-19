@@ -12,7 +12,7 @@ const {
   getCategories,
   createCategory,
   deleteCategory
-} = require('../controllers/galleryControllerDynamo');
+} = require('../controllers/galleryController');
 
 const { protect, admin } = require('../middleware/authMiddlewareDynamo');
 
