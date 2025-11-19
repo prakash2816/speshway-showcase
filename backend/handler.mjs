@@ -1,5 +1,6 @@
 // backend/handler.mjs
-import AWS from "aws-sdk";
+import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
+const client = new DynamoDBClient({ region: "ap-south-1" });
 import serverless from "serverless-http";
 import express from "express";
 import dotenv from "dotenv";
