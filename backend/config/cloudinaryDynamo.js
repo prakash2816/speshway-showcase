@@ -41,7 +41,7 @@ const createCloudinaryStorage = (folder) => {
 };
 
 // Create multer upload instances
-const uploadPortfolioImage = multer({
+const uploadPortfolioImageDynamo = multer({
   storage: createCloudinaryStorage('speshway/portfolios'),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB
@@ -87,7 +87,7 @@ const uploadGalleryImage = multer({
 module.exports = {
   cloudinary,
   createCloudinaryStorage,
-  uploadPortfolioImage,
+  uploadPortfolioImageDynamo,
   uploadTeamImage,
   uploadGalleryImage,
 };
