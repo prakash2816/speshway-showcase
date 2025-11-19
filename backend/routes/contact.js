@@ -12,12 +12,12 @@ const {
   updateSubmissionStatus,
   replyToSubmission,
   deleteSubmission
-} = require('../controllers/contactController');
+} = require('../controllers/contactControllerDynamo');
 
 const {
   protect,
   admin
-} = require('../middleware/authMiddleware');
+} = require('../middleware/authMiddlewareDynamo');
 
 // Public route: submit contact form with resume upload
 router.post('/submit', upload.single('resume'), submitContact);
