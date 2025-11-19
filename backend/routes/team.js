@@ -9,20 +9,20 @@ const {
   deleteTeamMemberDynamo
 } = require('../controllers/teamControllerDynamo');
 
-const { protectDynamo, adminDynamo } = require('../middleware/authMiddlewareDynamo');
-const { uploadTeamImage } = require('../config/cloudinary');
+const { protect, admin } = require('../middleware/authMiddlewareDynamo');
+const { uploadTeamImage } = require('../config/cloudinaryDynamo');
 
 // Public Route
 router
   .route('/')
   .get(getTeamMembersDynamo)
-  .post(protectDynamo, adminDynamo, uploadTeamImage.single('image'), createTeamMemberDynamo);
+  .post(protect, admin, uploadTeamImage.single('image'), createTeamMemberDynamo);
 
 // Admin Routes
 router
   .route('/:id')
   .get(getTeamMemberDynamo)
-  .put(protectDynamo, adminDynamo, uploadTeamImage.single('image'), updateTeamMemberDynamo)
-  .delete(protectDynamo, adminDynamo, deleteTeamMemberDynamo);
+  .put(protect, admin, uploadTeamImage.single('image'), updateTeamMemberDynamo)
+  .delete(protect, admin, deleteTeamMemberDynamo);
 
 module.exports = router;
