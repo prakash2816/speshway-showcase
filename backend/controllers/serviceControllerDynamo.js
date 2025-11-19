@@ -33,7 +33,7 @@ const getServicesDynamo = async (req, res) => {
 // ============================================================================
 // GET SINGLE SERVICE
 // ============================================================================
-const getServiceDynamo = async (req, res) => {
+const getService = async (req, res) => {
   try {
     const result = await ddb.send(
       new GetCommand({
@@ -56,7 +56,7 @@ const getServiceDynamo = async (req, res) => {
 // ============================================================================
 // CREATE SERVICE
 // ============================================================================
-const createServiceDynamo = async (req, res) => {
+const createService = async (req, res) => {
   try {
     const id = uuidv4();
 
@@ -84,7 +84,7 @@ const createServiceDynamo = async (req, res) => {
 // ============================================================================
 // UPDATE SERVICE
 // ============================================================================
-const updateServiceDynamo = async (req, res) => {
+const updateService = async (req, res) => {
   try {
     const existing = await ddb.send(
       new GetCommand({
@@ -120,7 +120,7 @@ const updateServiceDynamo = async (req, res) => {
 // ============================================================================
 // DELETE SERVICE
 // ============================================================================
-const deleteServiceDynamo = async (req, res) => {
+const deleteService = async (req, res) => {
   try {
     const existing = await ddb.send(
       new GetCommand({
@@ -149,8 +149,8 @@ const deleteServiceDynamo = async (req, res) => {
 
 module.exports = {
   getServicesDynamo,
-  getServiceDynamo,
-  createServiceDynamo,
-  updateServiceDynamo,
-  deleteServiceDynamo
+  getService,
+  createService,
+  updateService,
+  deleteService
 };
