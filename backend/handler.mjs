@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import path from "path";
 import multer from "multer";
-import dynamoClient from "./config/dynamodb.js";
+import dynamoClient from "./config/dynamodb.mjs";
 import { ListTablesCommand } from "@aws-sdk/client-dynamodb";
 import { fileURLToPath } from "url";
 
