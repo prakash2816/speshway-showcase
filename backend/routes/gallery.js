@@ -16,7 +16,7 @@ const {
 const { protectDynamo, adminDynamo } = require('../middleware/authMiddlewareDynamo');
 
 const multer = require('multer');
-const { createCloudinaryStorage } = require('../config/cloudinary');
+const { createCloudinaryStorage } = require('../config/cloudinaryDynamo');
 
 // Multer for gallery images (no change needed)
 const uploadGalleryImageDynamo = multer({
