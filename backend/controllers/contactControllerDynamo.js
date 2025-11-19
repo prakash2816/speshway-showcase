@@ -124,7 +124,7 @@ const getSubmissionsDynamo = async (req, res) => {
 // ------------------------------------------------------------
 // ✅ Get Single Submission
 // ------------------------------------------------------------
-const getSubmissionDynamo = async (req, res) => {
+const getSubmission = async (req, res) => {
   try {
     const { Item } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { id: req.params.id } }));
     if (!Item) return res.status(404).json({ success: false, message: "Not found" });
@@ -138,7 +138,7 @@ const getSubmissionDynamo = async (req, res) => {
 // ------------------------------------------------------------
 // ✅ Update Submission Status
 // ------------------------------------------------------------
-const updateSubmissionStatusDynamo = async (req, res) => {
+const updateSubmissionStatus = async (req, res) => {
   try {
     const { status } = req.body;
     const result = await ddb.send(
@@ -161,7 +161,7 @@ const updateSubmissionStatusDynamo = async (req, res) => {
 // ------------------------------------------------------------
 // ✅ Reply to Submission
 // ------------------------------------------------------------
-const replyToSubmissionDynamo = async (req, res) => {
+const replyToSubmission = async (req, res) => {
   try {
     const { message } = req.body;
     const replyObj = { id: uuid(), message, repliedBy: req.user?.name || "Admin", repliedAt: Date.now() };
@@ -187,7 +187,7 @@ const replyToSubmissionDynamo = async (req, res) => {
 // ------------------------------------------------------------
 // ✅ Delete Submission
 // ------------------------------------------------------------
-const deleteSubmissionDynamo = async (req, res) => {
+const deleteSubmission = async (req, res) => {
   try {
     await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { id: req.params.id } }));
     res.json({ success: true, message: "Submission deleted" });
@@ -201,11 +201,11 @@ const deleteSubmissionDynamo = async (req, res) => {
 // EXPORTS
 // ------------------------------------------------------------
 module.exports = {
-  uploadDynamo,
+  upload,
   submitContactDynamo,
   getSubmissionsDynamo,
-  getSubmissionDynamo,
-  updateSubmissionStatusDynamo,
-  replyToSubmissionDynamo,
-  deleteSubmissionDynamo
+  getSubmission,
+  updateSubmissionStatus,
+  replyToSubmission,
+  deleteSubmission,
 };
