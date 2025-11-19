@@ -1,22 +1,22 @@
-// backend/handler.mjs
-import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
-const client = new DynamoDBClient({ region: "ap-south-1" });
-import serverless from "serverless-http";
-import express from "express";
-import dotenv from "dotenv";
-import cors from "cors";
-import path from "path";
-import multer from "multer";
-import dynamoClient from "./config/dynamodb.js";
-import { ListTablesCommand } from "@aws-sdk/client-dynamodb";
-import { fileURLToPath } from "url";
+// backend/handler.js (CommonJS)
+const { DynamoDBClient, ScanCommand, ListTablesCommand } = require("@aws-sdk/client-dynamodb");
+const serverless = require("serverless-http");
+const express = require("express");
+const dotenv = require("dotenv");
+const cors = require("cors");
+const path = require("path");
+const multer = require("multer");
 
 // -----------------------------
-// ENV + __dirname for ES modules
+// ENV
 // -----------------------------
 dotenv.config();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.resolve();
+
+// -----------------------------
+// DYNAMODB CLIENT
+// -----------------------------
+const dynamoClient = new DynamoDBClient({ region: "ap-south-1" });
 
 // -----------------------------
 // EXPRESS APP SETUP
@@ -41,7 +41,7 @@ app.use(cors(corsOptions));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // -----------------------------
-// SIMPLE DYNAMODB DIRECT GET (RAW HANDLER LOGIC)
+// TABLES MAPPING
 // -----------------------------
 const TABLES = {
   clients: "SpeshwayClients",
@@ -54,13 +54,15 @@ const TABLES = {
   users: "SpeshwayUsers",
 };
 
-// Optional raw DynamoDB GET endpoint
+// -----------------------------
+// SIMPLE RAW GET ENDPOINT
+// -----------------------------
 app.get("/api/raw/:table", async (req, res) => {
   try {
     const tableKey = req.params.table;
     if (!TABLES[tableKey]) return res.status(404).json({ message: "Table not found" });
 
-    const data = await dynamoClient.scan({ TableName: TABLES[tableKey] });
+    const data = await dynamoClient.send(new ScanCommand({ TableName: TABLES[tableKey] }));
     return res.json({ data: data.Items || [] });
   } catch (err) {
     console.error(err);
@@ -69,16 +71,16 @@ app.get("/api/raw/:table", async (req, res) => {
 });
 
 // -----------------------------
-// IMPORT ALL OTHER EXPRESS ROUTES
+// IMPORT OTHER EXPRESS ROUTES (CommonJS require)
 // -----------------------------
-app.use("/api/auth", (await import("./routes/auth.js")).default);
-app.use("/api/contact", (await import("./routes/contact.js")).default);
-app.use("/api/services", (await import("./routes/services.js")).default);
-app.use("/api/portfolios", (await import("./routes/portfolios.js")).default);
-app.use("/api/team", (await import("./routes/team.js")).default);
-app.use("/api/gallery", (await import("./routes/gallery.js")).default);
-app.use("/api/clients", (await import("./routes/clients.js")).default);
-app.use("/api/sentences", (await import("./routes/sentences.js")).default);
+app.use("/api/auth", require("./routes/auth.js"));
+app.use("/api/contact", require("./routes/contact.js"));
+app.use("/api/services", require("./routes/services.js"));
+app.use("/api/portfolios", require("./routes/portfolios.js"));
+app.use("/api/team", require("./routes/team.js"));
+app.use("/api/gallery", require("./routes/gallery.js"));
+app.use("/api/clients", require("./routes/clients.js"));
+app.use("/api/sentences", require("./routes/sentences.js"));
 
 // -----------------------------
 // HEALTH CHECK ROUTES
@@ -109,12 +111,12 @@ app.use((error, req, res, next) => {
 // -----------------------------
 // EXPORT FOR SERVERLESS
 // -----------------------------
-export const main = serverless(app);
+module.exports.main = serverless(app);
 
 // -----------------------------
-// OPTIONAL RAW LAMBDA HANDLER FOR DIRECT API GATEWAY EVENTS
+// OPTIONAL RAW LAMBDA HANDLER
 // -----------------------------
-export const rawLambda = async (event) => {
+module.exports.rawLambda = async (event) => {
   try {
     if (event.httpMethod === "OPTIONS") return { statusCode: 200, body: "CORS OK" };
 
@@ -124,7 +126,7 @@ export const rawLambda = async (event) => {
 
     if (event.httpMethod === "GET") {
       const params = { TableName: TABLES[tableKey] };
-      const data = await dynamoClient.scan(params).promise();
+      const data = await dynamoClient.send(new ScanCommand(params));
       return { statusCode: 200, body: JSON.stringify({ data: data.Items || [] }) };
     }
 
