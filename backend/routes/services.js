@@ -3,25 +3,25 @@ const router = express.Router();
 
 const {
   getServicesDynamo,
-  getServiceDynamo,
-  createServiceDynamo,
-  updateServiceDynamo,
-  deleteServiceDynamo
+  getService,
+  createService,
+  updateService,
+  deleteService
 } = require('../controllers/serviceControllerDynamo');
 
-const { protectDynamo, adminDynamo } = require('../middleware/authMiddlewareDynamo');
+const { protect, admin } = require('../middleware/authMiddlewareDynamo');
 
 // Public Routes
 router
   .route('/')
   .get(getServicesDynamo)
-  .post(protectDynamo, adminDynamo, createServiceDynamo);
+  .post(protect, admin, createService);
 
 // Admin protected routes
 router
   .route('/:id')
   .get(getServiceDynamo)
-  .put(protectDynamo, adminDynamo, updateServiceDynamo)
-  .delete(protectDynamo, adminDynamo, deleteServiceDynamo);
+  .put(protect, admin, updateService)
+  .delete(protect, admin, deleteService);
 
 module.exports = router;
