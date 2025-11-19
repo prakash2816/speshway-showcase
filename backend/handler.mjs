@@ -25,18 +25,30 @@ const response = (statusCode, body) => ({
 });
 
 export const main = async (event) => {
-  if (event.httpMethod === "OPTIONS") return response(200, { message: "CORS preflight OK" });
-
   try {
-    const pathParts = event.path.split("/").filter(Boolean); // ["api", "clients"]
-    const tableKey = pathParts[1]; // "clients", "gallery", etc.
+    // Handle CORS preflight
+    if (event.httpMethod === "OPTIONS") {
+      return response(200, { message: "CORS preflight OK" });
+    }
 
-    if (!TABLES[tableKey]) return response(404, { message: "Route not found" });
+    // Split path, e.g., "/api/clients" → ["api", "clients"]
+    const pathParts = event.path.split("/").filter(Boolean);
+    const tableKey = pathParts[1]; // clients, contacts, etc.
 
-    const params = { TableName: TABLES[tableKey] };
-    const data = await dynamo.scan(params).promise();
+    if (!TABLES[tableKey]) {
+      return response(404, { message: "Route not found" });
+    }
 
-    return response(200, { data: data.Items || [] });
+    // For now, simple GET: return all items
+    if (event.httpMethod === "GET") {
+      const params = { TableName: TABLES[tableKey] };
+      const data = await dynamo.scan(params).promise();
+      return response(200, { data: data.Items || [] });
+    }
+
+    // Optional: implement POST/PUT/DELETE if needed
+    return response(400, { message: "Method not supported yet" });
+
   } catch (err) {
     console.error(err);
     return response(500, { message: "Internal Server Error", error: err.message });
