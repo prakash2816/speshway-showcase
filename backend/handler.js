@@ -11,7 +11,6 @@ const multer = require("multer");
 // ENV
 // -----------------------------
 dotenv.config();
-const __dirname = path.resolve();
 
 // -----------------------------
 // DYNAMODB CLIENT
