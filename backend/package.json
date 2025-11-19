@@ -13,5 +13,6 @@
     "nodemailer": "^7.0.10",
     "openai": "^6.8.1",
     "serverless-http": "^3.0.0"
+    "uuid": "^9.0.0"
   }
 }
