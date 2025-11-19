@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 
 const {
-  getPortfoliosDynamo,
-  getPortfolioDynamo,
-  createPortfolioDynamo,
-  updatePortfolioDynamo,
-  deletePortfolioDynamo
+  getPortfolios,
+  getPortfolio,
+  createPortfolio,
+  updatePortfolio,
+  deletePortfolio
 } = require('../controllers/portfolioControllerDynamo');
 
 const { protect, admin } = require('../middleware/authMiddlewareDynamo');
@@ -16,23 +16,23 @@ const { uploadPortfolioImageDynamo } = require('../config/cloudinaryDynamo');
 // Routes
 router
   .route('/')
-  .get(getPortfoliosDynamo)
+  .get(getPortfolios)
   .post(
     protect,
     admin,
     uploadPortfolioImageDynamo.single('image'),
-    createPortfolioDynamo
+    createPortfolio
   );
 
 router
   .route('/:id')
-  .get(getPortfolioDynamo)
+  .get(getPortfolio)
   .put(
     protect,
     admin,
     uploadPortfolioImageDynamo.single('image'),
-    updatePortfolioDynamo
+    updatePortfolio
   )
-  .delete(protect, admin, deletePortfolioDynamo);
+  .delete(protect, admin, deletePortfolio);
 
 module.exports = router;
