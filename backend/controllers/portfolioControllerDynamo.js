@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
-const { cloudinary } = require("../config/cloudinary");
+const { cloudinary } = require("../config/cloudinaryDynamo");
 const {
   DynamoDBDocumentClient,
   ScanCommand,
