@@ -1,7 +1,9 @@
+// backend/handler.mjs
 import AWS from "aws-sdk";
 
 const dynamo = new AWS.DynamoDB.DocumentClient();
 
+// Map route keys to DynamoDB table names
 const TABLES = {
   clients: "SpeshwayClients",
   contacts: "SpeshwayContacts",
@@ -13,6 +15,7 @@ const TABLES = {
   users: "SpeshwayUsers",
 };
 
+// Standard API response
 const response = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -24,20 +27,23 @@ const response = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
-export const handler = async (event) => {
+// Lambda handler
+export const main = async (event) => {
+  // Handle CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return response(200, { message: "CORS preflight OK" });
   }
 
   try {
-    const pathParts = event.path.split("/").filter(Boolean); // split "/api/clients" → ["api", "clients"]
-    const tableKey = pathParts[1]; // "clients", "contacts", etc.
+    // Example path: "/api/clients" → ["api", "clients"]
+    const pathParts = event.path.split("/").filter(Boolean);
+    const tableKey = pathParts[1]; // "clients", "gallery", etc.
 
     if (!TABLES[tableKey]) {
       return response(404, { message: "Route not found" });
     }
 
-    // DynamoDB Scan (fetch all items)
+    // Fetch all items from DynamoDB table
     const params = { TableName: TABLES[tableKey] };
     const data = await dynamo.scan(params).promise();
 
