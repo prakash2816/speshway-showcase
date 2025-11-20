@@ -12,7 +12,7 @@ const {
 const {
   protect,
   optionalProtect,
-  adminDynamo
+  admin
 } = require('../middleware/authMiddlewareDynamo');
 
 router
