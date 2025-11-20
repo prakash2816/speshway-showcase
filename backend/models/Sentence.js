@@ -1,84 +1,121 @@
-// sentence.dynamodb.js
+// models/Sentence.js
 const { v4: uuidv4 } = require("uuid");
-const AWS = require("aws-sdk");
+const {
+  DynamoDBDocumentClient,
+  ScanCommand,
+  GetCommand,
+  PutCommand,
+  UpdateCommand,
+  DeleteCommand
+} = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 
-const dynamodb = new AWS.DynamoDB.DocumentClient();
-const TABLE_NAME = "Sentence";
+const ddbClient = new DynamoDBClient({});
+const ddb = DynamoDBDocumentClient.from(ddbClient);
 
-/**
- * Create Sentence
- */
-exports.createSentence = async (data) => {
+const TABLE_NAME = "Sentences";
+
+// =============================================================
+// CREATE SENTENCE
+// =============================================================
+exports.createSentence = async (data, userAgent) => {
   const id = uuidv4();
-  const timestamp = Date.now();
+  const timestamp = data.timestamp || new Date().toISOString();
 
   const item = {
-    PK: `sentence#${id}`,
-    SK: "meta",
-
     id,
     text: data.text,
     url: data.url,
-
-    timestamp: data.timestamp || timestamp,
-    userAgent: data.userAgent || "",
-
-    recordedAt: timestamp,
+    userAgent: userAgent || "",
+    timestamp
   };
 
-  await dynamodb
-    .put({
+  await ddb.send(
+    new PutCommand({
       TableName: TABLE_NAME,
-      Item: item,
+      Item: item
     })
-    .promise();
+  );
 
   return item;
 };
 
-/**
- * Get Sentence by ID
- */
-exports.getSentenceById = async (id) => {
-  const result = await dynamodb
-    .get({
-      TableName: TABLE_NAME,
-      Key: {
-        PK: `sentence#${id}`,
-        SK: "meta",
-      },
+// =============================================================
+// GET ALL SENTENCES
+// =============================================================
+exports.getAllSentences = async () => {
+  const result = await ddb.send(
+    new ScanCommand({
+      TableName: TABLE_NAME
     })
-    .promise();
+  );
+
+  return result.Items || [];
+};
+
+// =============================================================
+// GET SENTENCE BY ID
+// =============================================================
+exports.getSentenceById = async (id) => {
+  const result = await ddb.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { id }
+    })
+  );
 
   return result.Item;
 };
 
-/**
- * Get All Sentences (scan)
- */
-exports.getAllSentences = async () => {
-  const result = await dynamodb
-    .scan({
-      TableName: TABLE_NAME,
-    })
-    .promise();
+// =============================================================
+// UPDATE SENTENCE
+// =============================================================
+exports.updateSentenceById = async (id, fields) => {
+  const UpdateExpression = [];
+  const ExpressionAttributeValues = {};
 
-  return result.Items;
+  if (fields.text) {
+    UpdateExpression.push("text = :t");
+    ExpressionAttributeValues[":t"] = fields.text;
+  }
+
+  if (fields.url) {
+    UpdateExpression.push("url = :u");
+    ExpressionAttributeValues[":u"] = fields.url;
+  }
+
+  if (fields.userAgent) {
+    UpdateExpression.push("userAgent = :a");
+    ExpressionAttributeValues[":a"] = fields.userAgent;
+  }
+
+  if (fields.timestamp) {
+    UpdateExpression.push("timestamp = :ts");
+    ExpressionAttributeValues[":ts"] = fields.timestamp;
+  }
+
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { id },
+      UpdateExpression: "SET " + UpdateExpression.join(", "),
+      ExpressionAttributeValues
+    })
+  );
+
+  return { id, ...fields };
 };
 
-/**
- * Delete Sentence
- */
-exports.deleteSentence = async (id) => {
-  await dynamodb
-    .delete({
+// =============================================================
+// DELETE SENTENCE
+// =============================================================
+exports.deleteSentenceById = async (id) => {
+  await ddb.send(
+    new DeleteCommand({
       TableName: TABLE_NAME,
-      Key: {
-        PK: `sentence#${id}`,
-        SK: "meta",
-      },
+      Key: { id }
     })
-    .promise();
+  );
 
-  return { message: "Sentence deleted successfully" };
+  return { message: "Sentence removed" };
 };
