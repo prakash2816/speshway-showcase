@@ -1,6 +1,7 @@
 // backend/handler.js (CommonJS)
 const { DynamoDBClient, ScanCommand, ListTablesCommand } = require("@aws-sdk/client-dynamodb");
 const serverless = require("serverless-http");
+const app = require('./index.js')
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
