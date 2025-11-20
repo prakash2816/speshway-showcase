@@ -11,13 +11,13 @@ const {
 
 const {
   protect,
-  optionalProtectDynamo,
+  optionalProtect,
   adminDynamo
 } = require('../middleware/authMiddlewareDynamo');
 
 router
   .route('/')
-  .get(optionalProtectDynamo, getClients)
+  .get(optionalProtect, getClients)
   .post(protect, admin, createClient);
 
 router
