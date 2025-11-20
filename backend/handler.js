@@ -58,19 +58,19 @@ const TABLES = {
 // -----------------------------
 app.get("/api/raw/:table", async (req, res) => {
   try {
-    const tableKey = req.params.table;
+    const tableKey = req.params.table.toLowerCase();
     if (!TABLES[tableKey]) return res.status(404).json({ message: "Table not found" });
 
     const data = await dynamoClient.send(new ScanCommand({ TableName: TABLES[tableKey] }));
-    return res.json({ data: data.Items || [] });
+    res.json({ data: data.Items || [] });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Internal Server Error", error: err.message });
+    console.error("RAW GET ERROR:", err);
+    res.status(500).json({ message: "Internal Server Error", error: err.message });
   }
 });
 
 // -----------------------------
-// IMPORT OTHER EXPRESS ROUTES (CommonJS require)
+// IMPORT OTHER EXPRESS ROUTES
 // -----------------------------
 app.use("/api/auth", require("./routes/auth.js"));
 app.use("/api/contact", require("./routes/contact.js"));
@@ -79,7 +79,7 @@ app.use("/api/portfolios", require("./routes/portfolios.js"));
 app.use("/api/team", require("./routes/team.js"));
 app.use("/api/gallery", require("./routes/gallery.js"));
 app.use("/api/clients", require("./routes/clients.js"));
-app.use("/api/Sentences", require("./routes/Sentences.js"));
+app.use("/api/sentences", require("./routes/Sentences.js")); // lowercase route
 
 // -----------------------------
 // HEALTH CHECK ROUTES
@@ -93,6 +93,7 @@ app.get("/api/health", async (req, res) => {
     await dynamoClient.send(new ListTablesCommand({}));
     res.json({ status: "ok", message: "Backend & DynamoDB healthy ✔️", dynamodb: "connected" });
   } catch (err) {
+    console.error("HEALTH CHECK ERROR:", err);
     res.status(500).json({ status: "error", message: "DynamoDB connection failed ❌", error: err.message });
   }
 });
@@ -104,6 +105,7 @@ app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({ success: false, message: "File size too large. Max 5MB" });
   }
+  console.error("GLOBAL ERROR:", error);
   res.status(500).json({ success: false, message: "Internal server error", error: error.message });
 });
 
@@ -120,18 +122,17 @@ module.exports.rawLambda = async (event) => {
     if (event.httpMethod === "OPTIONS") return { statusCode: 200, body: "CORS OK" };
 
     const pathParts = event.path.split("/").filter(Boolean);
-    const tableKey = pathParts[1];
-    if (!TABLES[tableKey]) return { statusCode: 404, body: "Route not found" };
+    const tableKey = pathParts[pathParts.length - 1].toLowerCase(); // always take last part
+    if (!TABLES[tableKey]) return { statusCode: 404, body: "Table not found" };
 
     if (event.httpMethod === "GET") {
-      const params = { TableName: TABLES[tableKey] };
-      const data = await dynamoClient.send(new ScanCommand(params));
+      const data = await dynamoClient.send(new ScanCommand({ TableName: TABLES[tableKey] }));
       return { statusCode: 200, body: JSON.stringify({ data: data.Items || [] }) };
     }
 
     return { statusCode: 400, body: "Method not supported" };
   } catch (err) {
-    console.error(err);
+    console.error("RAW LAMBDA ERROR:", err);
     return { statusCode: 500, body: JSON.stringify({ message: "Internal Server Error", error: err.message }) };
   }
 };
