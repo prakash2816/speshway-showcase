@@ -51,7 +51,7 @@ app.use('/api/portfolios', (await import('./routes/portfolios.js')).default);
 app.use('/api/team', (await import('./routes/team.js')).default);
 app.use('/api/gallery', (await import('./routes/gallery.js')).default);
 app.use('/api/clients', (await import('./routes/clients.js')).default);
-app.use('/api/sentences', (await import('./routes/sentences.js')).default);
+app.use('/api/Sentences', (await import('./routes/Sentences.js')).default);
 
 // -----------------------------
 // ROOT HEALTH CHECK
