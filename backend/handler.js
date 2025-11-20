@@ -30,6 +30,7 @@ const corsOptions = {
     "http://localhost:3000",
     "http://127.0.0.1:8080",
     "http://127.0.0.1:3000",
+    "http://serverless-framework-deployments-ap-south-1-1d23c6b6-2eb9.s3-website.ap-south-1.amazonaws.com"
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
