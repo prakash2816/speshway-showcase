@@ -79,7 +79,7 @@ app.use("/api/portfolios", require("./routes/portfolios.js"));
 app.use("/api/team", require("./routes/team.js"));
 app.use("/api/gallery", require("./routes/gallery.js"));
 app.use("/api/clients", require("./routes/clients.js"));
-app.use("/api/sentences", require("./routes/Sentences.js")); // lowercase route
+app.use("/api/Sentences", require("./routes/Sentences.js")); 
 
 // -----------------------------
 // HEALTH CHECK ROUTES
