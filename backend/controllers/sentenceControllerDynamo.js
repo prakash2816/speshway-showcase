@@ -19,19 +19,13 @@ const TABLE_NAME = "Sentences";
 // ============================================================================
 const getSentences = async (req, res) => {
   try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: TABLE_NAME
-      })
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE_NAME }));
+    const sentences = (result.Items || []).sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-
-    // Sort newest first (Dynamo doesn't sort)
-    const sentences = result.Items.sort(
-      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-    );
-
     res.json(sentences);
   } catch (error) {
+    console.error("Get sentences error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -42,10 +36,7 @@ const getSentences = async (req, res) => {
 const getSentence = async (req, res) => {
   try {
     const result = await ddb.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
     );
 
     if (!result.Item) {
@@ -54,6 +45,7 @@ const getSentence = async (req, res) => {
 
     res.json(result.Item);
   } catch (error) {
+    console.error("Get sentence error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -63,26 +55,26 @@ const getSentence = async (req, res) => {
 // ============================================================================
 const createSentence = async (req, res) => {
   try {
+    if (!req.body.text) {
+      return res.status(400).json({ message: "Text field is required" });
+    }
+
     const id = uuidv4();
     const timestamp = req.body.timestamp || new Date().toISOString();
 
     const newSentence = {
       id,
       text: req.body.text,
-      url: req.body.url,
+      url: req.body.url || "",
       userAgent: req.headers["user-agent"] || "",
       timestamp
     };
 
-    await ddb.send(
-      new PutCommand({
-        TableName: TABLE_NAME,
-        Item: newSentence
-      })
-    );
+    await ddb.send(new PutCommand({ TableName: TABLE_NAME, Item: newSentence }));
 
     res.status(201).json(newSentence);
   } catch (error) {
+    console.error("Create sentence error:", error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -92,43 +84,39 @@ const createSentence = async (req, res) => {
 // ============================================================================
 const updateSentence = async (req, res) => {
   try {
-    // Get existing item
     const existing = await ddb.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
     );
 
     if (!existing.Item) {
       return res.status(404).json({ message: "Sentence not found" });
     }
 
-    // Merge updated fields
     const updatedData = {
-      text: req.body.text || existing.Item.text,
-      url: req.body.url || existing.Item.url,
-      userAgent: req.body.userAgent || existing.Item.userAgent,
-      timestamp: req.body.timestamp || existing.Item.timestamp
+      text: req.body.text ?? existing.Item.text,
+      url: req.body.url ?? existing.Item.url,
+      userAgent: req.body.userAgent ?? existing.Item.userAgent,
+      timestamp: req.body.timestamp ?? existing.Item.timestamp
     };
 
     await ddb.send(
       new UpdateCommand({
         TableName: TABLE_NAME,
         Key: { id: req.params.id },
-        UpdateExpression:
-          "SET text = :t, url = :u, userAgent = :a, timestamp = :ts",
+        UpdateExpression: "SET text = :t, url = :u, userAgent = :a, timestamp = :ts",
         ExpressionAttributeValues: {
           ":t": updatedData.text,
           ":u": updatedData.url,
           ":a": updatedData.userAgent,
           ":ts": updatedData.timestamp
-        }
+        },
+        ReturnValues: "ALL_NEW"
       })
     );
 
     res.json({ id: req.params.id, ...updatedData });
   } catch (error) {
+    console.error("Update sentence error:", error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -139,10 +127,7 @@ const updateSentence = async (req, res) => {
 const deleteSentence = async (req, res) => {
   try {
     const existing = await ddb.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
     );
 
     if (!existing.Item) {
@@ -150,14 +135,12 @@ const deleteSentence = async (req, res) => {
     }
 
     await ddb.send(
-      new DeleteCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
+      new DeleteCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
     );
 
     res.json({ message: "Sentence removed" });
   } catch (error) {
+    console.error("Delete sentence error:", error);
     res.status(500).json({ message: error.message });
   }
 };
