@@ -1,3 +1,5 @@
+// backend/routes/sentences.js
+
 const express = require('express');
 const router = express.Router();
 
@@ -11,17 +13,17 @@ const {
 
 const { protect, admin } = require('../middleware/authMiddlewareDynamo');
 
-// Public routes
-router
-  .route('/')
-  .get(getSentences)
-  .post(createSentence);
+// ------------------------------
+// PUBLIC ROUTES
+// ------------------------------
+router.get('/', getSentences);
+router.post('/', createSentence);
 
-// Admin protected routes
-router
-  .route('/:id')
-  .get(getSentence)
-  .put(protect, admin, updateSentence)
-  .delete(protect, admin, deleteSentence);
+// ------------------------------
+// ADMIN PROTECTED ROUTES
+// ------------------------------
+router.get('/:id', getSentence);
+router.put('/:id', protect, admin, updateSentence);
+router.delete('/:id', protect, admin, deleteSentence);
 
 module.exports = router;
