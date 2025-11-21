@@ -13,7 +13,7 @@ const {
 } = require("@aws-sdk/lib-dynamodb");
 
 // Create DynamoDB client
-const client = new DynamoDBClient({});
+const client = new DynamoDBClient({ region: "ap-south-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
 const TABLE_NAME = "Clients";
@@ -23,24 +23,16 @@ const TABLE_NAME = "Clients";
 // -------------------------------
 const getClients = async (req, res) => {
   try {
-    const isAdmin =
-      req.user && (req.user.role === "admin" || req.user.role === "hr");
-
+    const isAdmin = req.user && (req.user.role === "admin" || req.user.role === "hr");
     const showAll = req.query.all === "true" && isAdmin;
 
-    const params = {
-      TableName: TABLE_NAME
-    };
-
-    const result = await docClient.send(new ScanCommand(params));
-
+    const result = await docClient.send(new ScanCommand({ TableName: TABLE_NAME }));
     let clients = result.Items || [];
 
     if (!showAll) {
-      clients = clients.filter((c) => c.isActive === true);
+      clients = clients.filter(c => c.isActive === true);
     }
 
-    // (Optional) Sort by creation date
     clients.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.json(clients);
@@ -54,12 +46,10 @@ const getClients = async (req, res) => {
 // -------------------------------
 const getClient = async (req, res) => {
   try {
-    const params = {
+    const result = await docClient.send(new GetCommand({
       TableName: TABLE_NAME,
       Key: { id: req.params.id }
-    };
-
-    const result = await docClient.send(new GetCommand(params));
+    }));
 
     if (!result.Item) {
       return res.status(404).json({ message: "Client not found" });
@@ -90,12 +80,7 @@ const createClient = async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    const params = {
-      TableName: TABLE_NAME,
-      Item: newClient
-    };
-
-    await docClient.send(new PutCommand(params));
+    await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: newClient }));
 
     res.status(201).json(newClient);
   } catch (error) {
@@ -108,34 +93,31 @@ const createClient = async (req, res) => {
 // -------------------------------
 const updateClient = async (req, res) => {
   try {
-    const existing = await docClient.send(
-      new GetCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
-    );
+    const existing = await docClient.send(new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { id: req.params.id }
+    }));
 
     if (!existing.Item) {
       return res.status(404).json({ message: "Client not found" });
     }
 
+    // Prepare update values
     const updateData = {
-      name: req.body.name?.trim() ?? existing.Item.name,
-      logo: req.body.logo?.trim() ?? existing.Item.logo,
-      website: req.body.website?.trim() ?? existing.Item.website,
-      description: req.body.description?.trim() ?? existing.Item.description,
-      isActive:
-        req.body.isActive !== undefined
-          ? req.body.isActive
-          : existing.Item.isActive,
-      updatedAt: new Date().toISOString()
+      ":name": req.body.name?.trim() ?? existing.Item.name,
+      ":logo": req.body.logo?.trim() ?? existing.Item.logo,
+      ":website": req.body.website?.trim() ?? existing.Item.website,
+      ":description": req.body.description?.trim() ?? existing.Item.description,
+      ":isActive": req.body.isActive !== undefined ? req.body.isActive : existing.Item.isActive,
+      ":updatedAt": new Date().toISOString()
     };
 
     const params = {
       TableName: TABLE_NAME,
       Key: { id: req.params.id },
       UpdateExpression:
-        "set #name = :name, logo = :logo, website = :website, description = :description, isActive = :isActive, updatedAt = :updatedAt",
-      ExpressionAttributeNames: {
-        "#name": "name"
-      },
+        "SET #name = :name, logo = :logo, website = :website, description = :description, isActive = :isActive, updatedAt = :updatedAt",
+      ExpressionAttributeNames: { "#name": "name" },
       ExpressionAttributeValues: updateData,
       ReturnValues: "ALL_NEW"
     };
@@ -153,12 +135,10 @@ const updateClient = async (req, res) => {
 // -------------------------------
 const deleteClient = async (req, res) => {
   try {
-    const params = {
+    await docClient.send(new DeleteCommand({
       TableName: TABLE_NAME,
       Key: { id: req.params.id }
-    };
-
-    await docClient.send(new DeleteCommand(params));
+    }));
 
     res.json({ message: "Client removed" });
   } catch (error) {
