@@ -20,9 +20,9 @@ const TABLE = "Services";
 const getServicesDynamo = async (req, res) => {
   try {
     const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
-
-    const services = result.Items.sort((a, b) => b.createdAt - a.createdAt);
-
+    const services = (result.Items || []).sort(
+      (a, b) => b.createdAt - a.createdAt
+    );
     res.json(services);
   } catch (error) {
     console.error("Get services error:", error);
@@ -36,10 +36,7 @@ const getServicesDynamo = async (req, res) => {
 const getService = async (req, res) => {
   try {
     const result = await ddb.send(
-      new GetCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE, Key: { id: req.params.id } })
     );
 
     if (!result.Item) {
@@ -58,21 +55,21 @@ const getService = async (req, res) => {
 // ============================================================================
 const createService = async (req, res) => {
   try {
+    if (!req.body.name) {
+      return res.status(400).json({ message: "Service name is required" });
+    }
+
     const id = uuidv4();
+    const timestamp = Date.now();
 
     const newService = {
       id,
       ...req.body,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      createdAt: timestamp,
+      updatedAt: timestamp
     };
 
-    await ddb.send(
-      new PutCommand({
-        TableName: TABLE,
-        Item: newService
-      })
-    );
+    await ddb.send(new PutCommand({ TableName: TABLE, Item: newService }));
 
     res.status(201).json(newService);
   } catch (error) {
@@ -87,10 +84,7 @@ const createService = async (req, res) => {
 const updateService = async (req, res) => {
   try {
     const existing = await ddb.send(
-      new GetCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE, Key: { id: req.params.id } })
     );
 
     if (!existing.Item) {
@@ -103,12 +97,7 @@ const updateService = async (req, res) => {
       updatedAt: Date.now()
     };
 
-    await ddb.send(
-      new PutCommand({
-        TableName: TABLE,
-        Item: updated
-      })
-    );
+    await ddb.send(new PutCommand({ TableName: TABLE, Item: updated }));
 
     res.json(updated);
   } catch (error) {
@@ -123,22 +112,14 @@ const updateService = async (req, res) => {
 const deleteService = async (req, res) => {
   try {
     const existing = await ddb.send(
-      new GetCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE, Key: { id: req.params.id } })
     );
 
     if (!existing.Item) {
       return res.status(404).json({ message: "Service not found" });
     }
 
-    await ddb.send(
-      new DeleteCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id }
-      })
-    );
+    await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { id: req.params.id } }));
 
     res.json({ message: "Service removed" });
   } catch (error) {
