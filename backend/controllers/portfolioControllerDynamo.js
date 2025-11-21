@@ -20,19 +20,13 @@ const TABLE_NAME = "Portfolios";
 // ============================================================================
 const getPortfolios = async (req, res) => {
   try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: TABLE_NAME
-      })
-    );
-
-    // Sort newest first (Dynamo doesn't sort)
-    const portfolios = result.Items.sort(
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE_NAME }));
+    const portfolios = (result.Items || []).sort(
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
-
     res.json(portfolios);
   } catch (error) {
+    console.error("Get portfolios error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -43,18 +37,12 @@ const getPortfolios = async (req, res) => {
 const getPortfolio = async (req, res) => {
   try {
     const result = await ddb.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
     );
-
-    if (!result.Item) {
-      return res.status(404).json({ message: "Portfolio not found" });
-    }
-
+    if (!result.Item) return res.status(404).json({ message: "Portfolio not found" });
     res.json(result.Item);
   } catch (error) {
+    console.error("Get portfolio error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -65,39 +53,30 @@ const getPortfolio = async (req, res) => {
 const createPortfolio = async (req, res) => {
   try {
     const id = uuidv4();
+    const technologies = req.body.technologies
+      ? typeof req.body.technologies === "string"
+        ? JSON.parse(req.body.technologies)
+        : req.body.technologies
+      : [];
 
     const portfolioData = {
       id,
       title: req.body.title,
       category: req.body.category,
       description: req.body.description,
-      technologies:
-        typeof req.body.technologies === "string"
-          ? JSON.parse(req.body.technologies)
-          : req.body.technologies,
+      technologies,
       color: req.body.color || "from-blue-500/20 to-cyan-500/20",
-      image: {},
+      image: req.file
+        ? { url: req.file.path, publicId: req.file.filename || req.file.public_id }
+        : {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    // If image uploaded
-    if (req.file) {
-      portfolioData.image = {
-        url: req.file.path,
-        publicId: req.file.filename
-      };
-    }
-
-    await ddb.send(
-      new PutCommand({
-        TableName: TABLE_NAME,
-        Item: portfolioData
-      })
-    );
-
+    await ddb.send(new PutCommand({ TableName: TABLE_NAME, Item: portfolioData }));
     res.status(201).json(portfolioData);
   } catch (error) {
+    console.error("Create portfolio error:", error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -107,45 +86,36 @@ const createPortfolio = async (req, res) => {
 // ============================================================================
 const updatePortfolio = async (req, res) => {
   try {
-    // Get existing portfolio
     const existing = await ddb.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
     );
-
-    if (!existing.Item) {
-      return res.status(404).json({ message: "Portfolio not found" });
-    }
+    if (!existing.Item) return res.status(404).json({ message: "Portfolio not found" });
 
     const portfolio = existing.Item;
 
-    // Delete old image if new uploaded
+    // Delete old image if new one uploaded
     if (req.file && portfolio.image?.publicId) {
       try {
         await cloudinary.uploader.destroy(portfolio.image.publicId);
       } catch (err) {
-        console.error("Cloudinary delete error:", err);
+        console.warn("Cloudinary delete failed:", err.message);
       }
     }
 
-    // Build updated fields
+    const technologies = req.body.technologies
+      ? typeof req.body.technologies === "string"
+        ? JSON.parse(req.body.technologies)
+        : req.body.technologies
+      : portfolio.technologies;
+
     const updatedData = {
       title: req.body.title || portfolio.title,
       category: req.body.category || portfolio.category,
       description: req.body.description || portfolio.description,
-      technologies: req.body.technologies
-        ? typeof req.body.technologies === "string"
-          ? JSON.parse(req.body.technologies)
-          : req.body.technologies
-        : portfolio.technologies,
+      technologies,
       color: req.body.color || portfolio.color,
       image: req.file
-        ? {
-            url: req.file.path,
-            publicId: req.file.filename
-          }
+        ? { url: req.file.path, publicId: req.file.filename || req.file.public_id }
         : portfolio.image,
       updatedAt: new Date().toISOString()
     };
@@ -170,6 +140,7 @@ const updatePortfolio = async (req, res) => {
 
     res.json({ id: req.params.id, ...updatedData });
   } catch (error) {
+    console.error("Update portfolio error:", error);
     res.status(400).json({ message: error.message });
   }
 };
@@ -180,35 +151,22 @@ const updatePortfolio = async (req, res) => {
 const deletePortfolio = async (req, res) => {
   try {
     const existing = await ddb.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
+      new GetCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } })
     );
+    if (!existing.Item) return res.status(404).json({ message: "Portfolio not found" });
 
-    if (!existing.Item) {
-      return res.status(404).json({ message: "Portfolio not found" });
-    }
-
-    // Delete image from Cloudinary
     if (existing.Item.image?.publicId) {
       try {
         await cloudinary.uploader.destroy(existing.Item.image.publicId);
       } catch (err) {
-        console.error("Image delete error:", err);
+        console.warn("Cloudinary delete failed:", err.message);
       }
     }
 
-    // Delete item from table
-    await ddb.send(
-      new DeleteCommand({
-        TableName: TABLE_NAME,
-        Key: { id: req.params.id }
-      })
-    );
-
+    await ddb.send(new DeleteCommand({ TableName: TABLE_NAME, Key: { id: req.params.id } }));
     res.json({ message: "Portfolio removed" });
   } catch (error) {
+    console.error("Delete portfolio error:", error);
     res.status(500).json({ message: error.message });
   }
 };
