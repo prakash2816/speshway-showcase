@@ -1,3 +1,5 @@
+// backend/routes/auth.js
+
 const express = require("express");
 const router = express.Router();
 
@@ -5,29 +7,29 @@ const {
   registerUser,
   authUser,
   getMe,
-  getUsers, // make sure this is exported from your controller
+  getUsers,
 } = require("../controllers/authControllerDynamo");
 
-const { protect } = require("../middleware/authMiddlewareDynamo");
+const { protect, admin } = require("../middleware/authMiddlewareDynamo");
 
 // ------------------------
-// Auth Routes
+// AUTH ROUTES
 // ------------------------
 
-// Register User
+// Register a new user
 router.post("/register", registerUser);
 
-// Login User
+// Login user
 router.post("/login", authUser);
 
-// Get Current User (protected)
+// Get current logged-in user (protected route)
 router.get("/me", protect, getMe);
 
 // ------------------------
-// Users Routes
+// USERS ROUTES
 // ------------------------
 
-// Get All Users
-router.get("/users", getUsers);
+// Get all users (admin protected if needed)
+router.get("/users", protect, admin, getUsers);
 
 module.exports = router;
