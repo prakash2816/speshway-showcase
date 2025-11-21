@@ -4,11 +4,8 @@ const { DynamoDBDocumentClient } = require("@aws-sdk/lib-dynamodb");
 const connectDB = () => {
   try {
     const client = new DynamoDBClient({
-      region: process.env.AWS_REGION,
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      },
+      region: process.env.AWS_REGION || "ap-south-1",
+      // ⚠️ In Lambda, credentials are automatic — no need to set manually
     });
 
     const ddb = DynamoDBDocumentClient.from(client);
@@ -17,7 +14,7 @@ const connectDB = () => {
     return ddb;
   } catch (error) {
     console.error("DynamoDB Connection Error:", error.message);
-    process.exit(1);
+    throw new Error("Failed to connect to DynamoDB");
   }
 };
 
