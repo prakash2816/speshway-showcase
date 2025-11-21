@@ -5,7 +5,6 @@ const {
   DynamoDBDocumentClient,
   PutCommand,
   GetCommand,
-  UpdateCommand,
   DeleteCommand,
   ScanCommand
 } = require("@aws-sdk/lib-dynamodb");
@@ -14,8 +13,10 @@ const { v4: uuidv4 } = require("uuid");
 // DynamoDB Table
 const CLIENTS_TABLE = process.env.CLIENTS_TABLE || "Clients";
 
-// DynamoDB Client
-const docClient = DynamoDBDocumentClient.from(new DynamoDBClient());
+// DynamoDB Client with region
+const docClient = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: process.env.AWS_REGION || "ap-south-1" })
+);
 
 // ------------------------------
 // VALIDATION
@@ -64,6 +65,7 @@ async function getAllClients() {
     new ScanCommand({ TableName: CLIENTS_TABLE })
   );
 
+  // Return empty array if no items
   return result.Items || [];
 }
 
