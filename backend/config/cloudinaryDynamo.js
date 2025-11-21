@@ -1,5 +1,5 @@
-const cloudinary = require('cloudinary').v2;
-const multer = require('multer');
+const cloudinary = require("cloudinary").v2;
+const multer = require("multer");
 
 // Configure Cloudinary
 cloudinary.config({
@@ -8,79 +8,69 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Custom storage for Cloudinary
+// Cloudinary Storage Factory
 const createCloudinaryStorage = (folder) => {
   return {
     _handleFile: async (req, file, cb) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: folder,
-          resource_type: 'image',
-          transformation: folder === 'speshway/portfolios'
-            ? [{ width: 1200, height: 800, crop: 'limit', quality: 'auto' }]
-            : [{ width: 500, height: 500, crop: 'fill', gravity: 'face', quality: 'auto' }],
-        },
-        (error, result) => {
-          if (error) {
-            return cb(error);
-          }
-          cb(null, {
-            path: result.secure_url,
-            filename: result.public_id,
-            size: result.bytes,
-          });
-        }
-      );
+      try {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder,
+            resource_type: "image",
+            transformation:
+              folder === "speshway/portfolios"
+                ? [{ width: 1200, height: 800, crop: "limit", quality: "auto" }]
+                : [{ width: 500, height: 500, crop: "fill", gravity: "face", quality: "auto" }],
+          },
+          (error, result) => {
+            if (error) return cb(error);
 
-      file.stream.pipe(stream);
+            cb(null, {
+              path: result.secure_url,
+              filename: result.public_id,
+              size: result.bytes,
+            });
+          }
+        );
+
+        file.stream.pipe(uploadStream);
+      } catch (err) {
+        cb(err);
+      }
     },
-    _removeFile: (req, file, cb) => {
+    _removeFile(req, file, cb) {
       cb(null);
     },
   };
 };
 
-// Create multer upload instances
+// Portfolio Upload
 const uploadPortfolioImageDynamo = multer({
-  storage: createCloudinaryStorage('speshway/portfolios'),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
-  },
+  storage: createCloudinaryStorage("speshway/portfolios"),
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'), false);
-    }
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"), false);
   },
 });
 
+// Team Upload
 const uploadTeamImage = multer({
-  storage: createCloudinaryStorage('speshway/team'),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
-  },
+  storage: createCloudinaryStorage("speshway/team"),
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'), false);
-    }
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"), false);
   },
 });
 
-// Gallery image upload configuration
+// Gallery Upload
 const uploadGalleryImage = multer({
-  storage: createCloudinaryStorage('speshway/gallery'),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
-  },
+  storage: createCloudinaryStorage("speshway/gallery"),
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'), false);
-    }
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"), false);
   },
 });
 
