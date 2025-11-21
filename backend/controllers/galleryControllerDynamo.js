@@ -1,18 +1,12 @@
-// galleryController.js (DynamoDB + S3 + Multer)
 require("dotenv").config();
-const {
-  DynamoDBClient
-} = require("@aws-sdk/client-dynamodb");
-
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
   PutCommand,
   GetCommand,
   ScanCommand,
-  UpdateCommand,
   DeleteCommand
 } = require("@aws-sdk/lib-dynamodb");
-
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const multer = require("multer");
 const path = require("path");
@@ -21,7 +15,6 @@ const { v4: uuid } = require("uuid");
 // AWS Clients
 const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const ddb = DynamoDBDocumentClient.from(ddbClient);
-
 const s3 = new S3Client({ region: process.env.AWS_REGION });
 const BUCKET = process.env.AWS_S3_BUCKET;
 
@@ -34,35 +27,29 @@ const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter(req, file, cb) {
-    const allowed = /jpeg|jpg|png|webp/.test(path.extname(file.originalname).toLowerCase());
+    const allowed = /jpeg|jpg|png|webp/i.test(path.extname(file.originalname));
     if (!allowed) return cb(new Error("Only image files allowed"));
     cb(null, true);
   }
 });
 
 // -----------------------------------------
-//  GET ALL GALLERY ITEMS
+// GET ALL GALLERY ITEMS
 // -----------------------------------------
 const getGalleryItems = async (req, res) => {
   try {
     const { category, limit = 12, page = 1, sort = "DESC" } = req.query;
-
-    const params = { TableName: TABLE };
-    const result = await ddb.send(new ScanCommand(params));
-
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
     let items = result.Items || [];
 
-    // filter active only
     items = items.filter(i => i.isActive && i.title !== "Category Placeholder");
 
     if (category && category !== "all") {
       items = items.filter(i => i.category === category);
     }
 
-    // sorting
-    items.sort((a, b) => sort === "ASC" ? a.date - b.date : b.date - a.date);
+    items.sort((a, b) => sort.toUpperCase() === "ASC" ? new Date(a.date) - new Date(b.date) : new Date(b.date) - new Date(a.date));
 
-    // pagination
     const start = (page - 1) * limit;
     const paginated = items.slice(start, start + parseInt(limit));
 
@@ -85,20 +72,16 @@ const getGalleryItems = async (req, res) => {
 };
 
 // -----------------------------------------
-//  GET SINGLE ITEM
+// GET SINGLE ITEM
 // -----------------------------------------
 const getGalleryItem = async (req, res) => {
   try {
-    const { Item } = await ddb.send(
-      new GetCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id }
-      })
-    );
+    const result = await ddb.send(new GetCommand({ TableName: TABLE, Key: { id: req.params.id } }));
+    const item = result.Item;
 
-    if (!Item) return res.status(404).json({ success: false, message: "Not found" });
+    if (!item) return res.status(404).json({ success: false, message: "Not found" });
 
-    res.json({ success: true, data: Item });
+    res.json({ success: true, data: item });
   } catch (error) {
     console.error("Get single error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -106,7 +89,7 @@ const getGalleryItem = async (req, res) => {
 };
 
 // -----------------------------------------
-//  CREATE NEW GALLERY
+// CREATE NEW GALLERY ITEM
 // -----------------------------------------
 const createGalleryItem = async (req, res) => {
   try {
@@ -118,16 +101,13 @@ const createGalleryItem = async (req, res) => {
 
     if (!req.file) return res.status(400).json({ success: false, message: "Image required" });
 
-    // upload file to S3
     const key = `gallery/${Date.now()}-${req.file.originalname}`;
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: key,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype
-      })
-    );
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype
+    }));
 
     const id = uuid();
     const item = {
@@ -135,20 +115,16 @@ const createGalleryItem = async (req, res) => {
       title,
       description,
       category,
-      date: date ? Number(new Date(date)) : Date.now(),
+      date: date ? new Date(date).toISOString() : new Date().toISOString(),
       location: location || "",
       readMoreLink: readMoreLink || "",
-      image: {
-        url: `https://${BUCKET}.s3.amazonaws.com/${key}`,
-        key
-      },
+      image: { url: `https://${BUCKET}.s3.amazonaws.com/${key}`, key },
       createdBy: req.user?.id || "admin",
       isActive: true,
-      createdAt: Date.now()
+      createdAt: new Date().toISOString()
     };
 
     await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
-
     res.status(201).json({ success: true, data: item });
   } catch (error) {
     console.error("Create gallery error:", error);
@@ -157,68 +133,44 @@ const createGalleryItem = async (req, res) => {
 };
 
 // -----------------------------------------
-//  UPDATE GALLERY
+// UPDATE GALLERY ITEM
 // -----------------------------------------
 const updateGalleryItem = async (req, res) => {
   try {
-    const { title, description, category, date, location, readMoreLink, isActive } = req.body;
+    const result = await ddb.send(new GetCommand({ TableName: TABLE, Key: { id: req.params.id } }));
+    const oldItem = result.Item;
 
-    const { Item: oldItem } = await ddb.send(
-      new GetCommand({
-        TableName: TABLE,
-        Key: { id: req.params.id }
-      })
-    );
-
-    if (!oldItem) {
-      return res.status(404).json({ success: false, message: "Item not found" });
-    }
+    if (!oldItem) return res.status(404).json({ success: false, message: "Item not found" });
 
     let newImage = oldItem.image;
 
-    // uploading new image
     if (req.file) {
       const key = `gallery/${Date.now()}-${req.file.originalname}`;
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: BUCKET,
-          Key: key,
-          Body: req.file.buffer,
-          ContentType: req.file.mimetype
-        })
-      );
+      await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: req.file.buffer, ContentType: req.file.mimetype }));
       newImage = { url: `https://${BUCKET}.s3.amazonaws.com/${key}`, key };
 
-      // Delete old file
       if (oldItem.image?.key) {
-        await s3.send(
-          new DeleteObjectCommand({
-            Bucket: BUCKET,
-            Key: oldItem.image.key
-          })
-        );
+        try {
+          await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: oldItem.image.key }));
+        } catch (err) {
+          console.warn("Old image deletion failed:", err.message);
+        }
       }
     }
 
     const updates = {
       ...oldItem,
-      title: title || oldItem.title,
-      description: description || oldItem.description,
-      category: category || oldItem.category,
-      location: location !== undefined ? location : oldItem.location,
-      readMoreLink: readMoreLink !== undefined ? readMoreLink : oldItem.readMoreLink,
-      date: date ? Number(new Date(date)) : oldItem.date,
-      isActive: isActive !== undefined ? isActive : oldItem.isActive,
+      title: req.body.title || oldItem.title,
+      description: req.body.description || oldItem.description,
+      category: req.body.category || oldItem.category,
+      location: req.body.location !== undefined ? req.body.location : oldItem.location,
+      readMoreLink: req.body.readMoreLink !== undefined ? req.body.readMoreLink : oldItem.readMoreLink,
+      date: req.body.date ? new Date(req.body.date).toISOString() : oldItem.date,
+      isActive: req.body.isActive !== undefined ? req.body.isActive : oldItem.isActive,
       image: newImage
     };
 
-    await ddb.send(
-      new PutCommand({
-        TableName: TABLE,
-        Item: updates
-      })
-    );
-
+    await ddb.send(new PutCommand({ TableName: TABLE, Item: updates }));
     res.json({ success: true, data: updates });
   } catch (error) {
     console.error("Update gallery error:", error);
@@ -227,28 +179,24 @@ const updateGalleryItem = async (req, res) => {
 };
 
 // -----------------------------------------
-//  DELETE GALLERY
+// DELETE GALLERY ITEM
 // -----------------------------------------
 const deleteGalleryItem = async (req, res) => {
   try {
-    const { Item } = await ddb.send(
-      new GetCommand({ TableName: TABLE, Key: { id: req.params.id } })
-    );
+    const result = await ddb.send(new GetCommand({ TableName: TABLE, Key: { id: req.params.id } }));
+    const item = result.Item;
 
-    if (!Item) return res.status(404).json({ success: false, message: "Not found" });
+    if (!item) return res.status(404).json({ success: false, message: "Not found" });
 
-    // delete image from s3
-    if (Item.image?.key) {
-      await s3.send(
-        new DeleteObjectCommand({
-          Bucket: BUCKET,
-          Key: Item.image.key
-        })
-      );
+    if (item.image?.key) {
+      try {
+        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: item.image.key }));
+      } catch (err) {
+        console.warn("Image deletion failed:", err.message);
+      }
     }
 
     await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { id: req.params.id } }));
-
     res.json({ success: true, message: "Deleted successfully" });
   } catch (error) {
     console.error("Delete error:", error);
@@ -257,7 +205,7 @@ const deleteGalleryItem = async (req, res) => {
 };
 
 // -----------------------------------------
-//  GALLERY STATISTICS
+// GALLERY STATS
 // -----------------------------------------
 const getGalleryStats = async (req, res) => {
   try {
@@ -268,24 +216,9 @@ const getGalleryStats = async (req, res) => {
     const activeItems = items.filter(i => i.isActive).length;
 
     const categoryStats = {};
-    items.forEach(i => {
-      if (!categoryStats[i.category]) categoryStats[i.category] = 0;
-      categoryStats[i.category]++;
-    });
+    items.forEach(i => categoryStats[i.category] = (categoryStats[i.category] || 0) + 1);
 
-    const formattedStats = Object.keys(categoryStats).map(cat => ({
-      category: cat,
-      count: categoryStats[cat]
-    }));
-
-    res.json({
-      success: true,
-      data: {
-        totalItems,
-        activeItems,
-        categoryStats: formattedStats
-      }
-    });
+    res.json({ success: true, data: { totalItems, activeItems, categoryStats } });
   } catch (error) {
     console.error("Stats error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -293,20 +226,15 @@ const getGalleryStats = async (req, res) => {
 };
 
 // -----------------------------------------
-//  GET UNIQUE CATEGORIES
+// GET UNIQUE CATEGORIES
 // -----------------------------------------
 const getCategories = async (req, res) => {
   try {
     const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
     const items = result.Items || [];
-
     const categories = [...new Set(items.map(i => i.category))];
-
     const defaultCategories = ["Fests", "Awards", "Fun Activities", "Team Moments"];
-
-    const all = [...new Set([...categories, ...defaultCategories])].sort();
-
-    res.json({ success: true, data: all });
+    res.json({ success: true, data: [...new Set([...categories, ...defaultCategories])].sort() });
   } catch (error) {
     console.error("Category error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -314,33 +242,26 @@ const getCategories = async (req, res) => {
 };
 
 // -----------------------------------------
-//  CREATE CATEGORY (PLACEHOLDER ITEM)
+// CREATE CATEGORY (placeholder item)
 // -----------------------------------------
 const createCategory = async (req, res) => {
   try {
     const { name } = req.body;
-
-    if (!name || !name.trim()) {
-      return res.status(400).json({ success: false, message: "Category name required" });
-    }
-
-    const trimmed = name.trim();
+    if (!name || !name.trim()) return res.status(400).json({ success: false, message: "Category name required" });
 
     const id = uuid();
-
     const placeholder = {
       id,
       title: "Category Placeholder",
       description: "Auto created category placeholder",
-      category: trimmed,
+      category: name.trim(),
       image: { url: "placeholder", key: "placeholder" },
       isActive: false,
-      createdAt: Date.now()
+      createdAt: new Date().toISOString()
     };
 
     await ddb.send(new PutCommand({ TableName: TABLE, Item: placeholder }));
-
-    res.json({ success: true, message: "Category created", data: trimmed });
+    res.json({ success: true, message: "Category created", data: name.trim() });
   } catch (error) {
     console.error("Create category error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -348,30 +269,18 @@ const createCategory = async (req, res) => {
 };
 
 // -----------------------------------------
-//  DELETE CATEGORY
+// DELETE CATEGORY
 // -----------------------------------------
 const deleteCategory = async (req, res) => {
   try {
     const category = req.params.name;
-
     const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
     const items = result.Items || [];
 
-    const active = items.filter(
-      i => i.category === category && i.isActive && i.title !== "Category Placeholder"
-    ).length;
+    const active = items.filter(i => i.category === category && i.isActive && i.title !== "Category Placeholder").length;
+    if (active > 0) return res.status(400).json({ success: false, message: `Cannot delete. ${active} items using this category.` });
 
-    if (active > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete. ${active} items using this category.`
-      });
-    }
-
-    const placeholders = items.filter(
-      i => i.category === category && i.title === "Category Placeholder"
-    );
-
+    const placeholders = items.filter(i => i.category === category && i.title === "Category Placeholder");
     for (const p of placeholders) {
       await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { id: p.id } }));
     }
