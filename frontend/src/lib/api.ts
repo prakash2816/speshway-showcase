@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Base API URL - can be configured via environment variable
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://l6q0x9szcj.execute-api.ap-south-1.amazonaws.com/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://l6q0x9szcj.execute-api.ap-south-1.amazonaws.com/dev'
 
 // Create axios instance with default config
 const api = axios.create({
@@ -10,7 +10,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout
+  timeout: 90000, 
 });
 
 // Request interceptor to add auth token
