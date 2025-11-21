@@ -45,11 +45,11 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // -----------------------------
 const TABLES = {
   clients: "Clients",
-  contacts: "Contacts",
-  gallery: "Gallery",
+  contacts: "ContactTable",
+  gallery: "GalleryTable",
   portfolio: "Portfolios",
   sentences: "Sentences",
-  services: "SpeshwayServices",
+  services: "Services",
   team: "TABLE_NAME",
   users: "Users",
 };
