@@ -10,7 +10,7 @@ const generateToken = (id) => {
 
 // Get DynamoDB DocumentClient
 const ddb = connectDB();
-const TABLE_NAME = "SpeshwayUsers"; // Make sure to use a single table name
+const TABLE_NAME = "Users"; // Make sure to use a single table name
 
 // ------------------------------------------------------------
 // @desc    Register User
