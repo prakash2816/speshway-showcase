@@ -2,10 +2,7 @@ const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
   PutCommand,
-  GetCommand,
-  ScanCommand,
-  UpdateCommand,
-  DeleteCommand
+  ScanCommand
 } = require("@aws-sdk/lib-dynamodb");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const multer = require("multer");
@@ -24,7 +21,7 @@ const uploadDynamo = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter(req, file, cb) {
-    const allowed = /pdf|doc|docx/.test(path.extname(file.originalname).toLowerCase());
+    const allowed = /pdf|doc|docx/i.test(path.extname(file.originalname));
     if (!allowed) return cb(new Error("Only PDF, DOC, DOCX allowed"));
     cb(null, true);
   }
@@ -52,22 +49,27 @@ const submitContactDynamo = async (req, res) => {
     let resumeData = null;
 
     if (req.file) {
-      const key = `resumes/${Date.now()}-${req.file.originalname}`;
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: BUCKET,
-          Key: key,
-          Body: req.file.buffer,
-          ContentType: req.file.mimetype
-        })
-      );
-      resumeData = {
-        originalName: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        key,
-        url: `https://${BUCKET}.s3.amazonaws.com/${key}`
-      };
+      try {
+        const key = `resumes/${Date.now()}-${req.file.originalname}`;
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: BUCKET,
+            Key: key,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype
+          })
+        );
+        resumeData = {
+          originalName: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size,
+          key,
+          url: `https://${BUCKET}.s3.amazonaws.com/${key}`
+        };
+      } catch (s3Error) {
+        console.error("S3 Upload Error:", s3Error);
+        return res.status(500).json({ success: false, message: "Failed to upload resume" });
+      }
     }
 
     const id = uuid();
@@ -82,11 +84,12 @@ const submitContactDynamo = async (req, res) => {
       resume: resumeData,
       status: "pending",
       replies: [],
-      createdAt: Date.now()
+      createdAt: new Date().toISOString()
     };
 
     await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
 
+    // Send email for resume submissions
     if (type === "resume" && resumeData) {
       await sendEmail({
         to: process.env.ADMIN_EMAIL,
@@ -94,7 +97,7 @@ const submitContactDynamo = async (req, res) => {
         html: `<h2>New Resume Submission</h2>
                <p><strong>Name:</strong> ${name}</p>
                <p><strong>Email:</strong> ${email}</p>`,
-        attachments: []
+        attachments: [] // add resumeData.key or URL if needed
       });
     }
 
@@ -110,9 +113,10 @@ const submitContactDynamo = async (req, res) => {
 // ------------------------------------------------------------
 const getSubmissionsDynamo = async (req, res) => {
   try {
-    const { Items } = await ddb.send(new ScanCommand({ TableName: TABLE }));
-    Items.sort((a, b) => b.createdAt - a.createdAt);
-    res.json({ success: true, count: Items.length, data: Items });
+    const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
+    const items = result.Items || [];
+    items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ success: true, count: items.length, data: items });
   } catch (error) {
     console.error("Get submissions error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -120,10 +124,10 @@ const getSubmissionsDynamo = async (req, res) => {
 };
 
 // ------------------------------------------------------------
-// Export only the needed items
+// Export
 // ------------------------------------------------------------
 module.exports = {
-  uploadDynamo,          // used in routes as uploadDynamo.single('resume')
+  uploadDynamo,           // use in routes: uploadDynamo.single('resume')
   submitContactDynamo,
   getSubmissionsDynamo
 };
