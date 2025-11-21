@@ -69,7 +69,7 @@ api.interceptors.response.use(
 
 // Export base URL for file access
 export const getBaseUrl = () => {
-  return API_BASE_URL.replace('/api', '');
+  return API_BASE_URL;
 };
 
 export default api;
