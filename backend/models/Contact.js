@@ -14,7 +14,9 @@ const { v4: uuidv4 } = require("uuid");
 const CONTACTS_TABLE = process.env.CONTACTS_TABLE || "Contacts";
 
 // DynamoDB Client
-const docClient = DynamoDBDocumentClient.from(new DynamoDBClient());
+const docClient = DynamoDBDocumentClient.from(
+  new DynamoDBClient({ region: process.env.AWS_REGION || "ap-south-1" })
+);
 
 // ------------------------------
 // VALIDATION
@@ -24,12 +26,11 @@ function validateContact(data) {
   if (!data.email) return "Email is required";
   if (!data.subject) return "Subject is required";
   if (!data.message) return "Message is required";
-
   return null;
 }
 
 // ------------------------------
-// CREATE FORMATTER
+// FORMATTERS
 // ------------------------------
 function formatNewContact(data, fileData) {
   const timestamp = Date.now();
@@ -41,7 +42,6 @@ function formatNewContact(data, fileData) {
     phone: data.phone || "",
     subject: data.subject,
     message: data.message,
-
     resume: fileData
       ? {
           filename: fileData.filename,
@@ -52,20 +52,14 @@ function formatNewContact(data, fileData) {
           url: fileData.url,
         }
       : null,
-
     type: data.type || "contact", // contact | resume | message
     status: "new",
-
     replies: [],
-
     createdAt: timestamp,
     updatedAt: timestamp,
   };
 }
 
-// ------------------------------
-// UPDATE FORMATTER
-// ------------------------------
 function formatUpdatedContact(existing, updates, fileData) {
   const updated = {
     ...existing,
@@ -73,7 +67,6 @@ function formatUpdatedContact(existing, updates, fileData) {
     updatedAt: Date.now(),
   };
 
-  // If new resume uploaded
   if (fileData) {
     updated.resume = {
       filename: fileData.filename,
@@ -97,7 +90,6 @@ async function getAllContacts() {
   const result = await docClient.send(
     new ScanCommand({ TableName: CONTACTS_TABLE })
   );
-
   return result.Items || [];
 }
 
@@ -109,7 +101,6 @@ async function getContactById(id) {
       Key: { id },
     })
   );
-
   return result.Item;
 }
 
@@ -130,7 +121,7 @@ async function createContactRecord(data, fileData = null) {
   return item;
 }
 
-// UPDATE CONTACT (including resume)
+// UPDATE CONTACT
 async function updateContactRecord(id, updates, fileData = null) {
   const existing = await getContactById(id);
   if (!existing) throw new Error("Contact not found");
