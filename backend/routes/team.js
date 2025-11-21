@@ -16,7 +16,7 @@ const { uploadTeamImage } = require('../config/cloudinaryDynamo');
 router
   .route('/')
   .get(getTeamMembers)
-  .post(protect, admin, uploadTeamImage.single('image'), createTeamMember);
+  .post(protect, admin, uploadTeamImage.single('image'), updateTeamMember);
 
 // Admin Routes
 router
