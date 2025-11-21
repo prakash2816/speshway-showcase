@@ -3,14 +3,16 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const connectDB = require("../config/dynamodb");
 
-// Generate JWT
+// Generate JWT token
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 };
 
-// Get DynamoDB DocumentClient
+// DynamoDB DocumentClient
 const ddb = connectDB();
-const TABLE_NAME = "Users"; // Make sure to use a single table name
+
+// Table Name
+const TABLE_NAME = "Users";
 
 // ------------------------------------------------------------
 // @desc    Register User
@@ -24,19 +26,22 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Check if user exists
+    // Check existing user
     const existingUser = await ddb.send(
-      new GetCommand({ TableName: TABLE_NAME, Key: { email } })
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { email },
+      })
     );
 
     if (existingUser.Item) {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    // Hash password
+    // Password hashing
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Store user in DynamoDB
+    // Create new user
     const newUser = {
       email,
       name,
@@ -45,9 +50,13 @@ const registerUser = async (req, res) => {
       createdAt: new Date().toISOString(),
     };
 
-    await ddb.send(new PutCommand({ TableName: TABLE_NAME, Item: newUser }));
+    await ddb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: newUser,
+      })
+    );
 
-    // Return response
     res.status(201).json({
       email: newUser.email,
       name: newUser.name,
@@ -56,7 +65,7 @@ const registerUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Register Error:", error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server Error: " + error.message });
   }
 };
 
@@ -69,15 +78,20 @@ const authUser = async (req, res) => {
 
   try {
     const userData = await ddb.send(
-      new GetCommand({ TableName: TABLE_NAME, Key: { email } })
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { email },
+      })
     );
 
     const user = userData.Item;
+
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
@@ -90,20 +104,23 @@ const authUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Login Error:", error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server Error: " + error.message });
   }
 };
 
 // ------------------------------------------------------------
-// @desc    Get logged-in user profile
+// @desc    Get logged-in user
 // @route   GET /api/auth/me
 // ------------------------------------------------------------
 const getMe = async (req, res) => {
   try {
-    const email = req.user.email;
+    const userEmail = req.user.email;
 
     const userData = await ddb.send(
-      new GetCommand({ TableName: TABLE_NAME, Key: { email } })
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { email: userEmail },
+      })
     );
 
     if (!userData.Item) {
@@ -111,10 +128,11 @@ const getMe = async (req, res) => {
     }
 
     const user = userData.Item;
-    delete user.password; // remove password
+    delete user.password; // Hide password
+
     res.json(user);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: "Server Error: " + error.message });
   }
 };
 
@@ -124,11 +142,21 @@ const getMe = async (req, res) => {
 // ------------------------------------------------------------
 const getUsers = async (req, res) => {
   try {
-    const result = await ddb.send(new ScanCommand({ TableName: TABLE_NAME }));
-    res.json(result.Items);
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: TABLE_NAME,
+      })
+    );
+
+    res.json(result.Items || []);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Server Error: " + err.message });
   }
 };
 
-module.exports = { registerUser, authUser, getMe, getUsers };
+module.exports = {
+  registerUser,
+  authUser,
+  getMe,
+  getUsers,
+};
