@@ -9,7 +9,7 @@ const {
   createClientRecord,
   updateClientRecord,
   deleteClientRecord
-} = require('../models/client'); // import from your models folder
+} = require('../models/client'); // import from models
 
 const {
   protect,
@@ -27,6 +27,7 @@ router.get('/', optionalProtect, async (req, res) => {
     const clients = await getAllClients();
     res.json(clients);
   } catch (error) {
+    console.error("Get all clients error:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -37,6 +38,7 @@ router.post('/', protect, admin, async (req, res) => {
     const client = await createClientRecord(req.body);
     res.status(201).json(client);
   } catch (error) {
+    console.error("Create client error:", error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -48,6 +50,7 @@ router.get('/:id', async (req, res) => {
     if (!client) return res.status(404).json({ message: 'Client not found' });
     res.json(client);
   } catch (error) {
+    console.error("Get client error:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -58,6 +61,7 @@ router.put('/:id', protect, admin, async (req, res) => {
     const updated = await updateClientRecord(req.params.id, req.body);
     res.json(updated);
   } catch (error) {
+    console.error("Update client error:", error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -68,6 +72,7 @@ router.delete('/:id', protect, admin, async (req, res) => {
     const result = await deleteClientRecord(req.params.id);
     res.json(result);
   } catch (error) {
+    console.error("Delete client error:", error);
     res.status(400).json({ message: error.message });
   }
 });
