@@ -62,14 +62,14 @@ app.get("/api/raw/:table", async (req, res) => {
 });
 
 // ROUTES
-app.use("/api/auth", require("./routes/auth.js"));
-app.use("/api/contact", require("./routes/contact.js"));
-app.use("/api/services", require("./routes/services.js"));
-app.use("/api/portfolios", require("./routes/portfolios.js"));
-app.use("/api/team", require("./routes/team.js"));
-app.use("/api/gallery", require("./routes/gallery.js"));
-app.use("/api/clients", require("./routes/clients.js"));
-app.use("/api/sentences", require("./routes/Sentences.js"));
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/contact", require("./routes/contact"));
+app.use("/api/services", require("./routes/services"));
+app.use("/api/portfolios", require("./routes/portfolios"));
+app.use("/api/team", require("./routes/team"));
+app.use("/api/gallery", require("./routes/gallery"));
+app.use("/api/clients", require("./routes/clients"));
+app.use("/api/sentences", require("./routes/Sentences"));
 
 // Health Check
 app.get("/", (req, res) => {
