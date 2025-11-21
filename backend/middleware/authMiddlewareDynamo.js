@@ -9,63 +9,48 @@ const USERS_TABLE = process.env.USERS_TABLE; // "Users"
 
 // Middleware: Protect Routes
 const protect = async (req, res, next) => {
-  let token;
+  try {
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith('Bearer ')
+    ) {
+      const token = req.headers.authorization.split(' ')[1];
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
-
-      // Decode token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Fetch user from DynamoDB
-      const params = {
-        TableName: USERS_TABLE,
-        Key: { id: decoded.id }
-      };
+      const { Item } = await docClient.send(
+        new GetCommand({ TableName: USERS_TABLE, Key: { id: decoded.id } })
+      );
 
-      const { Item } = await docClient.send(new GetCommand(params));
+      if (!Item) return res.status(401).json({ message: 'User not found' });
 
-      if (!Item) {
-        return res.status(401).json({ message: 'User not found' });
-      }
-
-      // Remove password before attaching
       const { password, ...userData } = Item;
       req.user = userData;
 
-      next();
-    } catch (error) {
-      console.error(error);
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      return next();
     }
-  } else {
+
     res.status(401).json({ message: 'Not authorized, no token' });
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    res.status(401).json({ message: 'Not authorized, token failed' });
   }
 };
 
-// Middleware: Optional Token (User may or may not be logged in)
+// Middleware: Optional Token
 const optionalProtect = async (req, res, next) => {
-  let token;
-
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
+  try {
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith('Bearer ')
+    ) {
+      const token = req.headers.authorization.split(' ')[1];
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      const params = {
-        TableName: USERS_TABLE,
-        Key: { id: decoded.id }
-      };
-
-      const { Item } = await docClient.send(new GetCommand(params));
+      const { Item } = await docClient.send(
+        new GetCommand({ TableName: USERS_TABLE, Key: { id: decoded.id } })
+      );
 
       if (Item) {
         const { password, ...userData } = Item;
@@ -73,9 +58,9 @@ const optionalProtect = async (req, res, next) => {
       } else {
         req.user = undefined;
       }
-    } catch (error) {
-      req.user = undefined;
     }
+  } catch (error) {
+    req.user = undefined;
   }
 
   next();
@@ -83,11 +68,10 @@ const optionalProtect = async (req, res, next) => {
 
 // Middleware: Admin Only
 const admin = (req, res, next) => {
-  if (req.user && (req.user.role === 'admin' || req.user.role === 'hr')) {
-    next();
-  } else {
-    res.status(401).json({ message: 'Not authorized as an admin' });
+  if (req.user && ['admin', 'hr'].includes(req.user.role)) {
+    return next();
   }
+  res.status(401).json({ message: 'Not authorized as an admin' });
 };
 
 module.exports = { protect, optionalProtect, admin };
