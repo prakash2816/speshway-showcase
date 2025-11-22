@@ -14,7 +14,7 @@ const {
 const { protect } = require("../middleware/authMiddleware");
 
 // Multer Upload (Cloudinary Storage)
-const upload = require('../config/cloudinaryDynamo');
+const upload = require('../middleware/multerCloudinary');
 
 // ------------------------------------------------------------
 // GET ALL PORTFOLIOS (Public)
