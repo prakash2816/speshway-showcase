@@ -1,55 +1,71 @@
-const jwt = require('jsonwebtoken');
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand } = require('@aws-sdk/lib-dynamodb');
+const jwt = require("jsonwebtoken");
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, GetCommand } = require("@aws-sdk/lib-dynamodb");
 
-const dynamoClient = new DynamoDBClient({});
+// DynamoDB Client
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-const USERS_TABLE = process.env.USERS_TABLE; // "Users"
+// Users Table Name
+const USERS_TABLE = process.env.USERS_TABLE || "Users";
 
-// Middleware: Protect Routes
+// ======================================
+// PROTECT (Requires Login)
+// ======================================
 const protect = async (req, res, next) => {
   try {
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith('Bearer ')
-    ) {
-      const token = req.headers.authorization.split(' ')[1];
+    const authHeader = req.headers.authorization;
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      const { Item } = await docClient.send(
-        new GetCommand({ TableName: USERS_TABLE, Key: { id: decoded.id } })
-      );
-
-      if (!Item) return res.status(401).json({ message: 'User not found' });
-
-      const { password, ...userData } = Item;
-      req.user = userData;
-
-      return next();
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Not authorized, no token" });
     }
 
-    res.status(401).json({ message: 'Not authorized, no token' });
+    const token = authHeader.split(" ")[1];
+
+    // Verify JWT
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Fetch user from DynamoDB
+    const { Item } = await docClient.send(
+      new GetCommand({
+        TableName: USERS_TABLE,
+        Key: { id: decoded.id }
+      })
+    );
+
+    if (!Item) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    // Remove password before attaching
+    const { password, ...userData } = Item;
+
+    req.user = userData;
+
+    next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(401).json({ message: 'Not authorized, token failed' });
+    console.error("Auth middleware error:", error);
+    return res.status(401).json({ message: "Not authorized, token failed" });
   }
 };
 
-// Middleware: Optional Token
+// ======================================
+// OPTIONAL PROTECT (Token Optional)
+// ======================================
 const optionalProtect = async (req, res, next) => {
   try {
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith('Bearer ')
-    ) {
-      const token = req.headers.authorization.split(' ')[1];
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       const { Item } = await docClient.send(
-        new GetCommand({ TableName: USERS_TABLE, Key: { id: decoded.id } })
+        new GetCommand({
+          TableName: USERS_TABLE,
+          Key: { id: decoded.id }
+        })
       );
 
       if (Item) {
@@ -66,12 +82,14 @@ const optionalProtect = async (req, res, next) => {
   next();
 };
 
-// Middleware: Admin Only
+// ======================================
+// ADMIN / HR ONLY
+// ======================================
 const admin = (req, res, next) => {
-  if (req.user && ['admin', 'hr'].includes(req.user.role)) {
+  if (req.user && ["admin", "hr"].includes(req.user.role)) {
     return next();
   }
-  res.status(401).json({ message: 'Not authorized as an admin' });
+  return res.status(401).json({ message: "Not authorized as admin" });
 };
 
 module.exports = { protect, optionalProtect, admin };
