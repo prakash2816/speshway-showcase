@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 
 // Multer for image upload
-const upload = multer({ dest: "uploads/" });
+const { uploadTeamImage } = require("../config/cloudinaryDynamo");
 
 // Controllers
 const {
