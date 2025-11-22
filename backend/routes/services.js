@@ -8,7 +8,7 @@ const {
   createService,
   updateService,
   deleteService
-} = require("../controllers/servicesControllerDynamo");
+} = require("../controllers/servicesController");
 
 // ==========================================================
 // GET ALL SERVICES
