@@ -12,7 +12,7 @@ const {
   createTeamMember,
   updateTeamMember,
   deleteTeamMember
-} = require("../controllers/teamControllerDynamo");
+} = require("../controllers/teamController");
 
 // ====================================================================
 // GET ALL TEAM MEMBERS
