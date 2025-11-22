@@ -1,38 +1,65 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
+// Controllers
 const {
   getPortfolios,
   getPortfolio,
   createPortfolio,
   updatePortfolio,
   deletePortfolio
-} = require('../controllers/portfolioControllerDynamo');
+} = require("../controllers/portfoliosController");
 
-const { protect, admin } = require('../middleware/authMiddlewareDynamo');
+// Auth Middleware (Admin / HR for write operations)
+const { protect } = require("../middleware/authMiddleware");
 
-const { uploadPortfolioImageDynamo } = require('../config/cloudinaryDynamo');
+// Multer Upload (Cloudinary Storage)
+const upload = require("../middleware/multerCloudinary");
 
-// Routes
-router
-  .route('/')
-  .get(getPortfolios)
-  .post(
-    protect,
-    admin,
-    uploadPortfolioImageDynamo.single('image'),
-    createPortfolio
-  );
+// ------------------------------------------------------------
+// GET ALL PORTFOLIOS (Public)
+// Route: GET /api/portfolios
+// ------------------------------------------------------------
+router.get("/", getPortfolios);
 
-router
-  .route('/:id')
-  .get(getPortfolio)
-  .put(
-    protect,
-    admin,
-    uploadPortfolioImageDynamo.single('image'),
-    updatePortfolio
-  )
-  .delete(protect, admin, deletePortfolio);
+// ------------------------------------------------------------
+// GET SINGLE PORTFOLIO (Public)
+// Route: GET /api/portfolios/:id
+// ------------------------------------------------------------
+router.get("/:id", getPortfolio);
+
+// ------------------------------------------------------------
+// CREATE PORTFOLIO (Protected: Admin / HR)
+// Route: POST /api/portfolios
+// Form-Data: image (file)
+// ------------------------------------------------------------
+router.post(
+  "/",
+  protect,
+  upload.single("image"),
+  createPortfolio
+);
+
+// ------------------------------------------------------------
+// UPDATE PORTFOLIO (Protected: Admin / HR)
+// Route: PUT /api/portfolios/:id
+// Optional new image in Form-Data
+// ------------------------------------------------------------
+router.put(
+  "/:id",
+  protect,
+  upload.single("image"),
+  updatePortfolio
+);
+
+// ------------------------------------------------------------
+// DELETE PORTFOLIO (Protected: Admin / HR)
+// Route: DELETE /api/portfolios/:id
+// ------------------------------------------------------------
+router.delete(
+  "/:id",
+  protect,
+  deletePortfolio
+);
 
 module.exports = router;
