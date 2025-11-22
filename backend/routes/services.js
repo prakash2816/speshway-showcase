@@ -1,27 +1,49 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
+// Controllers
 const {
   getServicesDynamo,
   getService,
   createService,
   updateService,
   deleteService
-} = require('../controllers/serviceControllerDynamo');
+} = require("../controllers/servicesControllerDynamo");
 
-const { protect, admin } = require('../middleware/authMiddlewareDynamo');
+// ==========================================================
+// GET ALL SERVICES
+// Route: GET /api/services
+// Public
+// ==========================================================
+router.get("/", getServicesDynamo);
 
-// Public Routes
-router
-  .route('/')
-  .get(getServicesDynamo)
-  .post(protect, admin, createService);
+// ==========================================================
+// GET SINGLE SERVICE
+// Route: GET /api/services/:id
+// Public
+// ==========================================================
+router.get("/:id", getService);
 
-// Admin protected routes
-router
-  .route('/:id')
-  .get(getService)
-  .put(protect, admin, updateService)
-  .delete(protect, admin, deleteService);
+// ==========================================================
+// CREATE SERVICE
+// Route: POST /api/services
+// Body: { name, ... }
+// Optional: Protect if needed
+// ==========================================================
+router.post("/", createService);
+
+// ==========================================================
+// UPDATE SERVICE
+// Route: PUT /api/services/:id
+// Optional: Protect if needed
+// ==========================================================
+router.put("/:id", updateService);
+
+// ==========================================================
+// DELETE SERVICE
+// Route: DELETE /api/services/:id
+// Optional: Protect if needed
+// ==========================================================
+router.delete("/:id", deleteService);
 
 module.exports = router;
