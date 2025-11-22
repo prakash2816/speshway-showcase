@@ -1,29 +1,44 @@
-// backend/routes/sentences.js
-
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
+// Controllers
 const {
   getSentences,
   getSentence,
   createSentence,
   updateSentence,
   deleteSentence
-} = require('../controllers/sentenceControllerDynamo');
+} = require("../controllers/sentencesController");
 
-const { protect, admin } = require('../middleware/authMiddlewareDynamo');
+// ------------------------------------------------------------
+// GET ALL SENTENCES (Public)
+// Route: GET /api/sentences
+// ------------------------------------------------------------
+router.get("/", getSentences);
 
-// ------------------------------
-// PUBLIC ROUTES
-// ------------------------------
-router.get('/', getSentences);
-router.post('/', createSentence);
+// ------------------------------------------------------------
+// GET SINGLE SENTENCE (Public)
+// Route: GET /api/sentences/:id
+// ------------------------------------------------------------
+router.get("/:id", getSentence);
 
-// ------------------------------
-// ADMIN PROTECTED ROUTES
-// ------------------------------
-router.get('/:id', getSentence);
-router.put('/:id', protect, admin, updateSentence);
-router.delete('/:id', protect, admin, deleteSentence);
+// ------------------------------------------------------------
+// CREATE SENTENCE (Public)
+// Route: POST /api/sentences
+// Body: { text, url? }
+// ------------------------------------------------------------
+router.post("/", createSentence);
+
+// ------------------------------------------------------------
+// UPDATE SENTENCE (Optional Protected)
+// Route: PUT /api/sentences/:id
+// ------------------------------------------------------------
+router.put("/:id", updateSentence);
+
+// ------------------------------------------------------------
+// DELETE SENTENCE (Optional Protected)
+// Route: DELETE /api/sentences/:id
+// ------------------------------------------------------------
+router.delete("/:id", deleteSentence);
 
 module.exports = router;
