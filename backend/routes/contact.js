@@ -5,7 +5,7 @@ const {
   uploadDynamo,
   submitContactDynamo,
   getSubmissionsDynamo
-} = require("../controllers/contactControllerDynamo");
+} = require("../controllers/contactController");
 
 // ------------------------------------------------------------
 // Submit Contact / Resume
